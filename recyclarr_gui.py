@@ -45,35 +45,29 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class CinemaTheme:
-    """Thème sombre élégant pour passionnés de home cinema."""
+    """Design System pour une ambiance Home Cinéma Premium."""
+    PRIMARY = "#FF4D00"        # Orange Cinéma vibrant
+    PRIMARY_DARK = "#CC3E00"   
+    SECONDARY = "#00B4D8"      # Bleu accent
+    ACCENT = "#FFB703"         # Ambre/Or
+    BACKGROUND = "#050505"     # Noir profond
+    SURFACE = "#111111"        # Gris très foncé
+    SURFACE_LIGHT = "#1A1A1A"  # Gris foncé
+    BORDER = "#2A2A2A"         # Bordure subtile
     
-    # Couleurs principales
-    BACKGROUND = "#1a1a1f"
-    SURFACE = "#25252d"
-    SURFACE_LIGHT = "#2d2d38"
-    PRIMARY = "#ff6b35"  # Orange chaud comme un projecteur
-    PRIMARY_DARK = "#e55a2b"
-    SECONDARY = "#4a9eff"  # Bleu électrique
-    ACCENT = "#ffd700"  # Or pour les highlights
+    TEXT_PRIMARY = "#FFFFFF"   
+    TEXT_SECONDARY = "#888888" 
+    TEXT_DISABLED = "#444444"
     
-    # Texte
-    TEXT_PRIMARY = "#ffffff"
-    TEXT_SECONDARY = "#a0a0b0"
-    TEXT_DISABLED = "#606070"
+    SUCCESS = "#2D6A4F"
+    ERROR = "#9B2226"
     
-    # État
-    SUCCESS = "#4caf50"
-    WARNING = "#ff9800"
-    ERROR = "#f44336"
+    RADARR_COLOR = "#FFC300"
+    SONARR_COLOR = "#00A8E8"
+    # Other status
+    WARNING = "#E9C46A"
     INFO = "#2196f3"
-    
-    # Bordures
-    BORDER = "#3a3a48"
-    BORDER_FOCUS = "#ff6b35"
-    
-    # Radarr vs Sonarr colors
-    RADARR_COLOR = "#ff6b35"  # Orange
-    SONARR_COLOR = "#4a9eff"  # Bleu
+    BORDER_FOCUS = "#FF4D00"
 
 
 # Stylesheet global
@@ -111,10 +105,11 @@ QPushButton {{
     background-color: {CinemaTheme.PRIMARY};
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 10px 20px;
-    font-weight: bold;
-    min-height: 20px;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-weight: 700;
+    font-size: 13px;
+    min-height: 24px;
 }}
 
 QPushButton:hover {{
@@ -167,6 +162,37 @@ QLineEdit {{
     selection-background-color: {CinemaTheme.PRIMARY};
 }}
 
+QSpinBox {{
+    background-color: {CinemaTheme.SURFACE};
+    color: {CinemaTheme.TEXT_PRIMARY};
+    border: 1px solid {CinemaTheme.BORDER};
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 25px;
+}}
+
+QSpinBox::up-button, QSpinBox::down-button {{
+    background-color: {CinemaTheme.PRIMARY};
+    border: 1px solid {CinemaTheme.BORDER};
+    border-radius: 4px;
+    width: 20px;
+    margin: 1px;
+}}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+    background-color: {CinemaTheme.PRIMARY_DARK};
+}}
+
+QSpinBox::up-arrow {{
+    width: 10px;
+    height: 10px;
+}}
+
+QSpinBox::down-arrow {{
+    width: 10px;
+    height: 10px;
+}}
+
 QLineEdit:focus {{
     border: 2px solid {CinemaTheme.PRIMARY};
 }}
@@ -210,8 +236,8 @@ QRadioButton::indicator:checked {{
 QListWidget {{
     background-color: {CinemaTheme.SURFACE};
     border: 1px solid {CinemaTheme.BORDER};
-    border-radius: 6px;
-    padding: 4px;
+    border-radius: 8px;
+    padding: 8px;
     outline: none;
 }}
 
@@ -296,25 +322,29 @@ QTextEdit {{
     background-color: {CinemaTheme.SURFACE};
     color: {CinemaTheme.TEXT_PRIMARY};
     border: 1px solid {CinemaTheme.BORDER};
-    border-radius: 6px;
-    padding: 8px;
+    border-radius: 8px;
+    padding: 12px;
     font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
+    font-size: 13px;
+    line-height: 1.5;
 }}
 
 QLabel {{
     color: {CinemaTheme.TEXT_PRIMARY};
+    line-height: 1.4;
 }}
 
 QLabel#title {{
-    font-size: 24px;
-    font-weight: bold;
+    font-size: 28px;
+    font-weight: 800;
     color: {CinemaTheme.PRIMARY};
+    letter-spacing: 1px;
 }}
 
 QLabel#subtitle {{
     font-size: 16px;
     color: {CinemaTheme.TEXT_SECONDARY};
+    font-weight: 500;
 }}
 
 QLabel#radarr-label {{
@@ -697,61 +727,54 @@ class TemplateSelectorWidget(QWidget):
         template_group = QGroupBox("Template de base")
         template_layout = QVBoxLayout(template_group)
         
-        # Radio buttons pour choisir le type
-        radio_layout = QHBoxLayout()
-        self.radio_predefined = QRadioButton("Template prédéfini")
-        self.radio_custom = QRadioButton("Template personnalisé")
-        self.radio_predefined.setChecked(True)
-        
-        self.radio_group = QButtonGroup()
-        self.radio_group.addButton(self.radio_predefined)
-        self.radio_group.addButton(self.radio_custom)
-        
-        radio_layout.addWidget(self.radio_predefined)
-        radio_layout.addWidget(self.radio_custom)
-        radio_layout.addStretch()
-        template_layout.addLayout(radio_layout)
-        
-        # Sélecteur de template prédéfini
-        self.predefined_widget = QWidget()
-        predefined_layout = QVBoxLayout(self.predefined_widget)
-        predefined_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Sélecteur de template (Mixte: Prédéfini + Custom)
         self.template_combo = QComboBox()
         self.template_combo.setMinimumWidth(300)
         self._populate_templates()
         self.template_combo.currentIndexChanged.connect(self._on_template_changed)
-        predefined_layout.addWidget(self.template_combo)
+        template_layout.addWidget(self.template_combo)
+        
+        # Widget d'info pour template prédéfini
+        self.predefined_info_widget = QWidget()
+        predefined_info_layout = QVBoxLayout(self.predefined_info_widget)
+        predefined_info_layout.setContentsMargins(0, 0, 0, 0)
         
         # Description du template sélectionné
-        self.template_desc = QLabel("Sélectionnez un template pour voir sa description")
+        desc_layout = QHBoxLayout()
+        info_label = QLabel("(i)")
+        info_label.setFixedWidth(20)
+        info_label.setStyleSheet(f"color: {CinemaTheme.ACCENT}; font-size: 10px; font-weight: bold;")
+        desc_layout.addWidget(info_label)
+        
+        self.template_desc = QLabel("Sélectionnez un template")
         self.template_desc.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 11px;")
         self.template_desc.setWordWrap(True)
-        predefined_layout.addWidget(self.template_desc)
+        desc_layout.addWidget(self.template_desc, stretch=1)
+        predefined_info_layout.addLayout(desc_layout)
+        
+        # Link info label tooltip to description
+        self.template_info_icon = info_label
         
         # Affichage des includes du template
         self.includes_preview = QLabel("")
         self.includes_preview.setStyleSheet(f"color: {CinemaTheme.SECONDARY}; font-size: 10px; padding: 4px; background-color: {CinemaTheme.SURFACE_LIGHT}; border-radius: 4px;")
         self.includes_preview.setWordWrap(True)
-        predefined_layout.addWidget(self.includes_preview)
+        predefined_info_layout.addWidget(self.includes_preview)
         
-        template_layout.addWidget(self.predefined_widget)
+        template_layout.addWidget(self.predefined_info_widget)
         
-        # Widget pour template personnalisé
-        self.custom_widget = QWidget()
-        custom_layout = QVBoxLayout(self.custom_widget)
-        custom_layout.setContentsMargins(0, 0, 0, 0)
+        # Widget d'info pour template personnalisé
+        self.custom_info_widget = QWidget()
+        custom_info_layout = QVBoxLayout(self.custom_info_widget)
+        custom_info_layout.setContentsMargins(0, 0, 0, 0)
         
-        custom_info = QLabel("Vous pourrez sélectionner manuellement les includes dans la section de droite")
+        custom_info = QLabel("Vous pouvez sélectionner manuellement les includes dans la section de droite")
         custom_info.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 11px;")
         custom_info.setWordWrap(True)
-        custom_layout.addWidget(custom_info)
+        custom_info_layout.addWidget(custom_info)
         
-        self.custom_widget.setVisible(False)
-        template_layout.addWidget(self.custom_widget)
-        
-        # Connecter les radio buttons
-        self.radio_predefined.toggled.connect(self._on_mode_changed)
+        self.custom_info_widget.setVisible(False)
+        template_layout.addWidget(self.custom_info_widget)
         
         layout.addWidget(template_group)
         
@@ -759,35 +782,47 @@ class TemplateSelectorWidget(QWidget):
         self._on_template_changed(0)
     
     def _populate_templates(self):
-        """Remplit le combo avec les templates disponibles."""
+        """Remplit le combo avec les templates disponibles + option Custom."""
         self.template_combo.clear()
         self.template_combo.addItem("-- Choisir un template --", None)
         
         templates = self.data_manager.get_templates_for_app(self.app)
         for template in templates:
             name = template.get("name", "")
-            desc = template.get("description", "")[:50]
-            display = f"{name}"
-            self.template_combo.addItem(display, name)
+            self.template_combo.addItem(name, name)
+            
+        # Ajouter l'option Custom
+        self.template_combo.insertSeparator(self.template_combo.count())
+        self.template_combo.addItem("Template personnalisé (Custom)", "__custom__")
     
-    def _on_mode_changed(self, checked):
-        """Change entre template prédéfini et custom."""
-        is_predefined = self.radio_predefined.isChecked()
-        self.predefined_widget.setVisible(is_predefined)
-        self.custom_widget.setVisible(not is_predefined)
+    def _on_mode_changed(self):
+        """Gestion du mode de template."""
+        is_custom = self.template_combo.currentData() == "__custom__"
+        self.predefined_info_widget.setVisible(not is_custom)
+        self.custom_info_widget.setVisible(is_custom)
         
-        if is_predefined:
-            self._on_template_changed(self.template_combo.currentIndex())
-        else:
+        if is_custom:
             self.template_changed.emit("__custom__", [])
+        else:
+            self._on_template_changed(self.template_combo.currentIndex())
     
     def _on_template_changed(self, index):
         """Quand un template est sélectionné."""
-        if index <= 0:
+        if index < 0:
             return
-        
+            
         template_name = self.template_combo.itemData(index)
+        
+        if template_name == "__custom__":
+            self._on_mode_changed()
+            return
+
+        self.predefined_info_widget.setVisible(True)
+        self.custom_info_widget.setVisible(False)
+
         if not template_name:
+            self.template_desc.setText("Sélectionnez un template pour voir sa description")
+            self.includes_preview.setText("")
             return
         
         template = self.data_manager.get_template_by_name(self.app, template_name)
@@ -795,12 +830,13 @@ class TemplateSelectorWidget(QWidget):
             self.selected_template = template_name
             desc = template.get("description", "Pas de description")
             self.template_desc.setText(desc)
+            self.template_info_icon.setToolTip(desc)
             
             includes = template.get("includes", [])
             includes_text = " | ".join(includes[:5]) if includes else "Aucun include"
             if len(includes) > 5:
                 includes_text += f" (+{len(includes) - 5} autres)"
-            self.includes_preview.setText(f"📦 Includes: {includes_text}")
+            self.includes_preview.setText(f"Includes: {includes_text}")
             
             self.template_changed.emit(template_name, includes)
 
@@ -821,15 +857,12 @@ class IncludeItemWidget(QWidget):
         layout.setSpacing(8)
         layout.setContentsMargins(8, 6, 8, 6)
         
-        # Icône selon le type
-        icons = {
-            "quality-definitions": "📊",
-            "quality-profiles": "⚙️",
-            "custom-formats": "🎯",
-            "template": "📋"
-        }
-        icon_label = QLabel(icons.get(self.include_type, "📋"))
-        layout.addWidget(icon_label)
+        # Info button/icon for tooltip
+        info_label = QLabel("(i)")
+        info_label.setFixedWidth(20)
+        info_label.setStyleSheet(f"color: {CinemaTheme.ACCENT}; font-size: 10px; font-weight: bold;")
+        info_label.setToolTip(f"Include: {self.include_name}\nType: {self.include_type}")
+        layout.addWidget(info_label)
         
         # Nom
         name_label = QLabel(self.include_name)
@@ -837,18 +870,20 @@ class IncludeItemWidget(QWidget):
         layout.addWidget(name_label, stretch=1)
         
         # Bouton supprimer
-        delete_btn = QPushButton("✕")
+        # Bouton supprimer
+        delete_btn = QPushButton("❌")
         delete_btn.setFixedSize(24, 24)
+        delete_btn.setToolTip("Supprimer")
         delete_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 border: none;
-                color: {CinemaTheme.TEXT_SECONDARY};
+                color: {CinemaTheme.ERROR};
                 font-size: 12px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {CinemaTheme.ERROR};
-                color: white;
+                background-color: rgba(155, 34, 38, 0.2);
                 border-radius: 4px;
             }}
         """)
@@ -882,7 +917,7 @@ class IncludesSectionWidget(QWidget):
         
         # Header
         header_layout = QHBoxLayout()
-        header = QLabel("📦 Include")
+        header = QLabel("Include")
         header.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {CinemaTheme.PRIMARY};")
         header_layout.addWidget(header)
         
@@ -908,7 +943,7 @@ class IncludesSectionWidget(QWidget):
         self._populate_selector()
         add_layout.addWidget(self.include_selector, stretch=1)
         
-        add_btn = QPushButton("➕ Ajouter")
+        add_btn = QPushButton("Ajouter")
         add_btn.setObjectName("success")
         add_btn.setFixedWidth(100)
         add_btn.clicked.connect(self._add_selected)
@@ -1012,7 +1047,7 @@ class QualityProfileItemWidget(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         
         # Icône
-        icon_label = QLabel("⚙️")
+        icon_label = QLabel("[P]")
         layout.addWidget(icon_label)
         
         # Nom
@@ -1024,13 +1059,13 @@ class QualityProfileItemWidget(QWidget):
         upgrade = self.profile_data.get("upgrade", {})
         if upgrade.get("allowed"):
             until = upgrade.get("until_quality", "")
-            info_text = f"↑ Jusqu'à: {until}"
+            info_text = f"UP: {until}"
             info_label = QLabel(info_text)
             info_label.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 10px;")
             layout.addWidget(info_label)
         
         # Boutons
-        edit_btn = QPushButton("✏️")
+        edit_btn = QPushButton("Edit")
         edit_btn.setFixedSize(28, 28)
         edit_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1046,7 +1081,7 @@ class QualityProfileItemWidget(QWidget):
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self.profile_name, self.profile_data))
         layout.addWidget(edit_btn)
         
-        delete_btn = QPushButton("✕")
+        delete_btn = QPushButton("X")
         delete_btn.setFixedSize(28, 28)
         delete_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1092,7 +1127,7 @@ class QualityProfilesSectionWidget(QWidget):
         
         # Header
         header_layout = QHBoxLayout()
-        header = QLabel("⚙️ Quality Profile")
+        header = QLabel("Quality Profile")
         header.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {CinemaTheme.PRIMARY};")
         header_layout.addWidget(header)
         
@@ -1111,7 +1146,7 @@ class QualityProfilesSectionWidget(QWidget):
         layout.addWidget(self.profiles_container)
         
         # Bouton ajouter
-        add_btn = QPushButton("➕ Ajouter un profil")
+        add_btn = QPushButton("Ajouter un profil")
         add_btn.setObjectName("success")
         add_btn.clicked.connect(self._add_new_profile)
         layout.addWidget(add_btn)
@@ -1256,18 +1291,19 @@ class QualitySelectionWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
         
-        # Header avec bouton "Tout sélectionner"
+        # Header avec boutons
         header_layout = QHBoxLayout()
-        header_layout.addWidget(QLabel("🎬 Qualités disponibles"))
+        header_layout.addWidget(QLabel("Qualités Sources"))
         header_layout.addStretch()
         
-        select_all_btn = QPushButton("✓ Tout")
-        select_all_btn.setFixedWidth(80)
+        select_all_btn = QPushButton("Tout")
+        select_all_btn.setFixedWidth(100)
         select_all_btn.clicked.connect(self.select_all)
         header_layout.addWidget(select_all_btn)
         
-        deselect_all_btn = QPushButton("✗ Aucun")
-        deselect_all_btn.setFixedWidth(80)
+        deselect_all_btn = QPushButton("Aucun")
+        deselect_all_btn.setFixedWidth(100)
+        deselect_all_btn.setObjectName("secondary")
         deselect_all_btn.clicked.connect(self.deselect_all)
         header_layout.addWidget(deselect_all_btn)
         
@@ -1278,7 +1314,7 @@ class QualitySelectionWidget(QWidget):
         self.qualities_list.setSelectionMode(QListWidget.MultiSelection)
         
         for quality_id, quality_name in self.qualities:
-            item = QListWidgetItem(f"☐ {quality_name}")
+            item = QListWidgetItem(quality_name)
             item.setData(Qt.UserRole, quality_id)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Unchecked)
@@ -1286,24 +1322,30 @@ class QualitySelectionWidget(QWidget):
         
         layout.addWidget(self.qualities_list)
         
-        # Boutons de groupe
-        group_layout = QHBoxLayout()
-        group_btn = QPushButton("📁 Grouper la sélection")
+        # Boutons d'action (Agissent sur le Profil Actif)
+        action_layout = QHBoxLayout()
+        
+        group_btn = QPushButton("Grouper les actifs")
+        group_btn.setFixedWidth(160)
         group_btn.clicked.connect(self.create_group)
-        group_layout.addWidget(group_btn)
+        action_layout.addWidget(group_btn)
         
-        ungroup_btn = QPushButton("📂 Dégrouper")
+        ungroup_btn = QPushButton("Dégrouper")
+        ungroup_btn.setFixedWidth(120)
+        ungroup_btn.setObjectName("secondary")
         ungroup_btn.clicked.connect(self.ungroup_selection)
-        group_layout.addWidget(ungroup_btn)
+        action_layout.addWidget(ungroup_btn)
         
-        group_layout.addStretch()
-        layout.addLayout(group_layout)
+        action_layout.addStretch()
+        layout.addLayout(action_layout)
         
         # Liste des qualités/groupes sélectionnés avec ordre
-        layout.addWidget(QLabel("📋 Qualités/groupes dans l'ordre de préférence (haut = meilleur):"))
+        layout.addWidget(QLabel("Profil Actif (Ordre de préférence, Haut = Meilleur):"))
         
         self.selected_list = QListWidget()
+        self.selected_list.setSelectionMode(QListWidget.ExtendedSelection)
         self.selected_list.setDragDropMode(QListWidget.InternalMove)
+        self.selected_list.setStyleSheet(f"border-left: 2px solid {CinemaTheme.PRIMARY};")
         layout.addWidget(self.selected_list)
         
         # Connecter les changements de case à cocher
@@ -1323,30 +1365,49 @@ class QualitySelectionWidget(QWidget):
         for i in range(self.selected_list.count()):
             item = self.selected_list.item(i)
             if item:
-                text = item.text().replace("📄 ", "").replace("📁 ", "")
+                text = item.text()
                 names.append(text)
         return names
     
     def on_quality_checked(self, item: QListWidgetItem):
-        """Quand une qualité est cochée/décochée."""
+        """Action immédiate lors de la coche : Activer/Désactiver."""
         quality_id = item.data(Qt.UserRole)
-        quality_name = item.text().replace("☐ ", "").replace("☑ ", "")
+        is_checked = item.checkState() == Qt.Checked
         
-        if item.checkState() == Qt.Checked:
-            item.setText(f"☑ {quality_name}")
-            # Ajouter à la liste si pas déjà présent
+        if is_checked:
             if not self._is_in_selected(quality_id):
-                list_item = QListWidgetItem(f"📄 {quality_name}")
+                list_item = QListWidgetItem(item.text())
                 list_item.setData(Qt.UserRole, {"type": "single", "qualities": [quality_id]})
                 self.selected_list.addItem(list_item)
+                self._emit_qualities_update()
         else:
-            item.setText(f"☐ {quality_name}")
-            # Retirer de la liste
             self._remove_from_selected(quality_id)
-        
-        # Émettre le signal de mise à jour
-        self._emit_qualities_update()
+            self._emit_qualities_update()
     
+    def add_selection(self):
+        pass
+
+    def deselect_all_source(self):
+        """Décoche uniquement la liste source sans vider le profil actif."""
+        self.qualities_list.blockSignals(True)
+        for i in range(self.qualities_list.count()):
+            self.qualities_list.item(i).setCheckState(Qt.Unchecked)
+        self.qualities_list.blockSignals(False)
+    
+    def remove_selection(self):
+        """Supprime l'élément sélectionné dans la liste de droite et décoche les boxes correspondantes."""
+        current_item = self.selected_list.currentItem()
+        if current_item:
+            data = current_item.data(Qt.UserRole)
+            if data:
+                self.qualities_list.blockSignals(True)
+                for qid in data.get("qualities", []):
+                    self._set_box_checked(qid, False)
+                self.qualities_list.blockSignals(False)
+            
+            self.selected_list.takeItem(self.selected_list.row(current_item))
+            self._emit_qualities_update()
+
     def _is_in_selected(self, quality_id: str) -> bool:
         """Vérifie si une qualité est déjà dans la liste sélectionnée."""
         for i in range(self.selected_list.count()):
@@ -1366,18 +1427,19 @@ class QualitySelectionWidget(QWidget):
                     self.selected_list.takeItem(i)
                 else:
                     # Groupe - retirer juste cette qualité
+                    data = item.data(Qt.UserRole)
                     qualities = data.get("qualities", [])
                     if quality_id in qualities:
                         qualities.remove(quality_id)
                         if len(qualities) == 1:
-                            # Plus qu'une qualité, transformer en single
-                            item.setData(Qt.UserRole, {"type": "single", "qualities": qualities})
-                            item.setText(f"📄 {self._get_quality_name(qualities[0])}")
+                            # Transformer en single
+                            qid = qualities[0]
+                            item.setData(Qt.UserRole, {"type": "single", "qualities": [qid]})
+                            item.setText(self._get_quality_name(qid))
                         elif len(qualities) == 0:
                             self.selected_list.takeItem(i)
                         else:
-                            item.setData(Qt.UserRole, {"type": "group", "qualities": qualities})
-                            item.setText(f"📁 {' | '.join(self._get_quality_name(q) for q in qualities)}")
+                            item.setText(' | '.join(self._get_quality_name(q) for q in qualities))
                 break
     
     def _get_quality_name(self, quality_id: str) -> str:
@@ -1388,57 +1450,31 @@ class QualitySelectionWidget(QWidget):
         return quality_id
     
     def create_group(self):
-        """Crée un groupe à partir des qualités cochées dans la liste de gauche."""
-        # Récupérer les qualités cochées dans qualities_list
-        checked_quality_ids = []
-        for i in range(self.qualities_list.count()):
-            item = self.qualities_list.item(i)
-            if item.checkState() == Qt.Checked:
-                quality_id = item.data(Qt.UserRole)
-                checked_quality_ids.append(quality_id)
-        
-        if len(checked_quality_ids) < 2:
-            QMessageBox.information(self, "Info", "Cochez au moins 2 qualités dans la liste de gauche pour les grouper")
+        """Groupe les éléments sélectionnés (highlighted) dans la liste de droite."""
+        selected_items = self.selected_list.selectedItems()
+        if len(selected_items) < 2:
+            QMessageBox.information(self, "Info", "Sélectionnez (clic + Ctrl/Maj) au moins 2 éléments dans la liste de droite pour les grouper")
             return
-        
-        # Trouver ces qualités dans selected_list et récupérer leurs positions
-        rows_to_remove = []
-        first_row = None
-        
-        for i in range(self.selected_list.count()):
-            item = self.selected_list.item(i)
+            
+        all_ids = []
+        rows = []
+        for item in selected_items:
             data = item.data(Qt.UserRole)
-            if data:
-                item_qualities = data.get("qualities", [])
-                # Si cette item contient une des qualités cochées
-                for qid in checked_quality_ids:
-                    if qid in item_qualities:
-                        rows_to_remove.append(i)
-                        if first_row is None:
-                            first_row = i
-                        break
-        
-        if len(rows_to_remove) < 2:
-            QMessageBox.information(self, "Info", "Les qualités cochées doivent d'abord être ajoutées à la liste de droite")
-            return
-        
-        # Créer le groupe avec toutes les qualités cochées
-        group_name = " | ".join(self._get_quality_name(q) for q in checked_quality_ids[:3])
-        if len(checked_quality_ids) > 3:
-            group_name += f" (+{len(checked_quality_ids) - 3})"
-        
-        group_item = QListWidgetItem(f"📁 {group_name}")
-        group_item.setData(Qt.UserRole, {"type": "group", "qualities": checked_quality_ids.copy()})
-        
-        # Supprimer les anciens items individuels (en ordre inverse pour garder les indices valides)
-        for row in sorted(rows_to_remove, reverse=True):
+            all_ids.extend(data.get("qualities", []))
+            rows.append(self.selected_list.row(item))
+            
+        first_row = min(rows)
+        # Supprimer en ordre inverse
+        for row in sorted(rows, reverse=True):
             self.selected_list.takeItem(row)
-        
-        # Insérer le groupe à la position du premier item supprimé
+            
+        group_name = " | ".join(self._get_quality_name(q) for q in all_ids[:3])
+        if len(all_ids) > 3:
+            group_name += f" (+{len(all_ids)-3})"
+            
+        group_item = QListWidgetItem(group_name)
+        group_item.setData(Qt.UserRole, {"type": "group", "qualities": all_ids})
         self.selected_list.insertItem(first_row, group_item)
-        self.selected_list.setCurrentItem(group_item)
-        
-        # Émettre le signal de mise à jour
         self._emit_qualities_update()
     
     def ungroup_selection(self):
@@ -1460,7 +1496,7 @@ class QualitySelectionWidget(QWidget):
         
         # Ajouter chaque qualité individuellement
         for quality_id in qualities:
-            item = QListWidgetItem(f"📄 {self._get_quality_name(quality_id)}")
+            item = QListWidgetItem(self._get_quality_name(quality_id))
             item.setData(Qt.UserRole, {"type": "single", "qualities": [quality_id]})
             self.selected_list.insertItem(row, item)
             row += 1
@@ -1469,19 +1505,27 @@ class QualitySelectionWidget(QWidget):
         self._emit_qualities_update()
     
     def select_all(self):
-        """Sélectionne toutes les qualités."""
+        """Sélectionne toutes les qualités (active tout)."""
+        self.qualities_list.blockSignals(True)
         for i in range(self.qualities_list.count()):
             item = self.qualities_list.item(i)
-            item.setCheckState(Qt.Checked)
-        # Le signal est déjà émis par on_quality_checked
+            if item.checkState() == Qt.Unchecked:
+                item.setCheckState(Qt.Checked)
+                qid = item.data(Qt.UserRole)
+                if not self._is_in_selected(qid):
+                    list_item = QListWidgetItem(item.text())
+                    list_item.setData(Qt.UserRole, {"type": "single", "qualities": [qid]})
+                    self.selected_list.addItem(list_item)
+        self.qualities_list.blockSignals(False)
+        self._emit_qualities_update()
     
     def deselect_all(self):
-        """Désélectionne toutes les qualités."""
-        self.selected_list.clear()
+        """Désélectionne toutes les qualités (désactive tout)."""
+        self.qualities_list.blockSignals(True)
         for i in range(self.qualities_list.count()):
-            item = self.qualities_list.item(i)
-            item.setCheckState(Qt.Unchecked)
-        # Émettre le signal de mise à jour
+            self.qualities_list.item(i).setCheckState(Qt.Unchecked)
+        self.qualities_list.blockSignals(False)
+        self.selected_list.clear()
         self._emit_qualities_update()
     
     def get_qualities_config(self) -> list[dict]:
@@ -1505,34 +1549,45 @@ class QualitySelectionWidget(QWidget):
                     })
         return config
     
-    def set_qualities_config(self, qualities: list):
-        """Définit la configuration des qualités."""
-        self.deselect_all()
+    def set_qualities_config(self, qualities_config: list):
+        """Définit la configuration des qualités et coche les boxes correspondantes."""
+        self.qualities_list.blockSignals(True)
+        self.selected_list.clear()
         
-        for item in qualities:
+        # Tout décocher au départ
+        for i in range(self.qualities_list.count()):
+            self.qualities_list.item(i).setCheckState(Qt.Unchecked)
+            
+        for item in qualities_config:
             if isinstance(item, str):
                 # Qualité simple
-                for i in range(self.qualities_list.count()):
-                    list_item = self.qualities_list.item(i)
-                    if list_item.data(Qt.UserRole) == item:
-                        list_item.setCheckState(Qt.Checked)
-                        break
+                qid = item
+                list_item = QListWidgetItem(self._get_quality_name(qid))
+                list_item.setData(Qt.UserRole, {"type": "single", "qualities": [qid]})
+                self.selected_list.addItem(list_item)
+                # Cocher la box
+                self._set_box_checked(qid, True)
             elif isinstance(item, dict):
                 # Groupe
                 group_qualities = item.get("qualities", [])
-                for quality_id in group_qualities:
-                    for i in range(self.qualities_list.count()):
-                        list_item = self.qualities_list.item(i)
-                        if list_item.data(Qt.UserRole) == quality_id:
-                            list_item.setCheckState(Qt.Checked)
-                            break
-                
-                # Créer l'item de groupe
-                if group_qualities:
-                    group_name = item.get("name", " | ".join(group_qualities[:2]))
-                    group_item = QListWidgetItem(f"📁 {group_name}")
-                    group_item.setData(Qt.UserRole, {"type": "group", "qualities": group_qualities})
-                    self.selected_list.addItem(group_item)
+                group_name = item.get("name", " | ".join(self._get_quality_name(q) for q in group_qualities[:2]))
+                group_item = QListWidgetItem(group_name)
+                group_item.setData(Qt.UserRole, {"type": "group", "qualities": group_qualities})
+                self.selected_list.addItem(group_item)
+                # Cocher les boxes
+                for qid in group_qualities:
+                    self._set_box_checked(qid, True)
+                    
+        self.qualities_list.blockSignals(False)
+        self._emit_qualities_update()
+
+    def _set_box_checked(self, quality_id: str, checked: bool):
+        """Force l'état d'une box sans trigger de signal."""
+        for i in range(self.qualities_list.count()):
+            item = self.qualities_list.item(i)
+            if item.data(Qt.UserRole) == quality_id:
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+                break
 
 
 class QualityProfileDialog(QDialog):
@@ -1540,8 +1595,8 @@ class QualityProfileDialog(QDialog):
     
     def __init__(self, parent=None, profile_name: str = "", profile_data: dict = None, app: str = "radarr"):
         super().__init__(parent)
-        self.setWindowTitle(f"Modifier le profil de qualité - {profile_name or 'Nouveau'}")
-        self.setMinimumSize(700, 800)
+        self.setWindowTitle(f"Modifier le profil - {profile_name or 'Nouveau'}")
+        self.setMinimumSize(1000, 1000)
         
         self.profile_name = profile_name or ""
         self.profile_data = profile_data or {}
@@ -1554,7 +1609,8 @@ class QualityProfileDialog(QDialog):
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
+        layout.setSpacing(24)
+        layout.setContentsMargins(32, 32, 32, 32)
         
         # Scroll area pour tout le contenu
         scroll = QScrollArea()
@@ -1633,10 +1689,10 @@ class QualityProfileDialog(QDialog):
         buttons.rejected.connect(self.reject)
         
         save_btn = buttons.button(QDialogButtonBox.Save)
-        save_btn.setText("💾 Sauvegarder")
+        save_btn.setText("Sauvegarder")
         
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
-        cancel_btn.setText("❌ Annuler")
+        cancel_btn.setText("Annuler")
         
         layout.addWidget(buttons)
     
@@ -1722,11 +1778,19 @@ class CustomFormatItemWidget(QWidget):
         layout.setSpacing(8)
         layout.setContentsMargins(8, 6, 8, 6)
         
+        # Info button
+        info_label = QLabel("(i)")
+        info_label.setFixedWidth(20)
+        info_label.setStyleSheet(f"color: {CinemaTheme.ACCENT}; font-size: 10px; font-weight: bold;")
+        if self.description:
+            info_label.setToolTip(self.description)
+        else:
+            info_label.setToolTip(f"Custom Format: {self.cf_name}")
+        layout.addWidget(info_label)
+        
         # Nom
         name_label = QLabel(self.cf_name)
         name_label.setStyleSheet(f"color: {CinemaTheme.TEXT_PRIMARY}; font-size: 12px; font-weight: bold;")
-        if self.description:
-            name_label.setToolTip(self.description[:200])
         layout.addWidget(name_label, stretch=1)
         
         # Score
@@ -1735,23 +1799,24 @@ class CustomFormatItemWidget(QWidget):
         self.score_spin.setRange(-100000, 100000)
         self.score_spin.setValue(score)
         self.score_spin.setSingleStep(100)
-        self.score_spin.setFixedWidth(80)
+        self.score_spin.setFixedWidth(100)
         self.score_spin.valueChanged.connect(lambda v: self.score_changed.emit(self.trash_id, v))
         layout.addWidget(self.score_spin)
         
         # Bouton supprimer
-        delete_btn = QPushButton("✕")
+        delete_btn = QPushButton("❌")
         delete_btn.setFixedSize(28, 28)
+        delete_btn.setToolTip("Supprimer")
         delete_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 border: none;
-                color: {CinemaTheme.TEXT_SECONDARY};
-                font-size: 12px;
+                color: {CinemaTheme.ERROR};
+                font-size: 14px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {CinemaTheme.ERROR};
-                color: white;
+                background-color: rgba(155, 34, 38, 0.2);
                 border-radius: 4px;
             }}
         """)
@@ -1786,7 +1851,7 @@ class CustomFormatsSectionWidget(QWidget):
         
         # Header
         header_layout = QHBoxLayout()
-        header = QLabel("🎯 Custom Format")
+        header = QLabel("Custom Format")
         header.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {CinemaTheme.PRIMARY};")
         header_layout.addWidget(header)
         
@@ -1796,13 +1861,30 @@ class CustomFormatsSectionWidget(QWidget):
         header_layout.addStretch()
         layout.addLayout(header_layout)
         
-        # Liste des CFs
+        # Liste des CFs (Scroll Area)
+        self.cf_scroll = QScrollArea()
+        self.cf_scroll.setWidgetResizable(True)
+        self.cf_scroll.setFrameShape(QFrame.NoFrame)
+        # Style spécifique pour la scrollbar invisible ou discrète
+        self.cf_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: transparent;
+                border: 1px solid {CinemaTheme.BORDER};
+                border-radius: 6px;
+            }}
+            QWidget {{
+                background-color: transparent;
+            }}
+        """)
+        
         self.cf_container = QWidget()
         self.cf_layout = QVBoxLayout(self.cf_container)
         self.cf_layout.setSpacing(4)
-        self.cf_layout.setContentsMargins(0, 0, 0, 0)
+        self.cf_layout.setContentsMargins(4, 4, 4, 4)
         self.cf_layout.addStretch()
-        layout.addWidget(self.cf_container)
+        
+        self.cf_scroll.setWidget(self.cf_container)
+        layout.addWidget(self.cf_scroll, stretch=1)
         
         # Sélecteur pour ajouter
         add_layout = QHBoxLayout()
@@ -1811,7 +1893,7 @@ class CustomFormatsSectionWidget(QWidget):
         self._populate_selector()
         add_layout.addWidget(self.cf_selector, stretch=1)
         
-        add_btn = QPushButton("➕ Ajouter")
+        add_btn = QPushButton("Ajouter")
         add_btn.setObjectName("success")
         add_btn.setFixedWidth(100)
         add_btn.clicked.connect(self._add_selected)
@@ -1927,23 +2009,19 @@ class InstanceEditorDialog(QDialog):
         self.instance = instance or InstanceConfig(name="")
         self.result_instance: InstanceConfig | None = None
         
-        self.setWindowTitle(f"Configuration {'Radarr' if app == 'radarr' else 'Sonarr'}")
-        self.setMinimumSize(1200, 800)
+        self.setWindowTitle(f"Configuration {app.capitalize()}")
+        self.setMinimumSize(1450, 1000)
         
         self.setup_ui()
         self.load_data()
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(24)
+        layout.setContentsMargins(32, 32, 32, 32)
         
         # Header
         header = QHBoxLayout()
-        icon = QLabel("🎬" if self.app == "radarr" else "📺")
-        icon.setStyleSheet(f"font-size: 32px; color: {CinemaTheme.RADARR_COLOR if self.app == 'radarr' else CinemaTheme.SONARR_COLOR};")
-        header.addWidget(icon)
-        
         title = QLabel(f"Configuration {'Radarr' if self.app == 'radarr' else 'Sonarr'}")
         title.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {CinemaTheme.RADARR_COLOR if self.app == 'radarr' else CinemaTheme.SONARR_COLOR};")
         header.addWidget(title)
@@ -2007,11 +2085,6 @@ class InstanceEditorDialog(QDialog):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(16)
         
-        # Titre
-        yaml_preview_title = QLabel("📄 Configuration YAML")
-        yaml_preview_title.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {CinemaTheme.TEXT_PRIMARY};")
-        right_layout.addWidget(yaml_preview_title)
-        
         # Section Include
         self.includes_section = IncludesSectionWidget(self.data_manager, self.app)
         self.includes_section.includes_changed.connect(self._update_yaml_preview)
@@ -2027,15 +2100,9 @@ class InstanceEditorDialog(QDialog):
         self.cf_section.custom_formats_changed.connect(self._update_yaml_preview)
         right_layout.addWidget(self.cf_section)
         
-        # Aperçu YAML
-        self.yaml_preview = QTextEdit()
-        self.yaml_preview.setReadOnly(True)
-        self.yaml_preview.setMaximumHeight(150)
-        self.yaml_preview.setPlaceholderText("L'aperçu du YAML apparaîtra ici...")
-        right_layout.addWidget(self.yaml_preview)
-        
+        right_layout.addStretch()
         splitter.addWidget(right_panel)
-        splitter.setSizes([400, 800])
+        splitter.setSizes([450, 750])
         
         layout.addWidget(splitter, stretch=1)
         
@@ -2045,10 +2112,10 @@ class InstanceEditorDialog(QDialog):
         button_box.rejected.connect(self.reject)
         
         save_btn = button_box.button(QDialogButtonBox.Save)
-        save_btn.setText("💾 Sauvegarder")
+        save_btn.setText("Sauvegarder")
         
         cancel_btn = button_box.button(QDialogButtonBox.Cancel)
-        cancel_btn.setText("❌ Annuler")
+        cancel_btn.setText("Annuler")
         
         layout.addWidget(button_box)
     
@@ -2089,7 +2156,7 @@ class InstanceEditorDialog(QDialog):
             if len(cfs) > 3:
                 preview += f"\n    # ... et {len(cfs) - 3} autres"
         
-        self.yaml_preview.setText(preview)
+        # Note: yaml_preview has been removed from UI
     
     def load_data(self):
         """Charge les données de l'instance."""
@@ -2155,9 +2222,20 @@ class InstanceCard(QFrame):
         self.app = app
         self.instance = instance
         self.setObjectName(f"{app}-card")
-        self.setFrameStyle(QFrame.StyledPanel)
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(350)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(400)
+        self.setStyleSheet(f"""
+            QFrame#{app}-card {{
+                background-color: {CinemaTheme.SURFACE};
+                border: 1px solid {CinemaTheme.BORDER};
+                border-radius: 12px;
+                border-left: 5px solid {CinemaTheme.RADARR_COLOR if app == 'radarr' else CinemaTheme.SONARR_COLOR};
+            }}
+            QFrame#{app}-card:hover {{
+                border: 1px solid {CinemaTheme.PRIMARY};
+                background-color: {CinemaTheme.SURFACE_LIGHT};
+            }}
+        """)
         self.setup_ui()
     
     def setup_ui(self):
@@ -2168,10 +2246,6 @@ class InstanceCard(QFrame):
         # Header
         header = QHBoxLayout()
         
-        icon_label = QLabel("🎬" if self.app == "radarr" else "📺")
-        icon_label.setStyleSheet(f"font-size: 24px; color: {CinemaTheme.RADARR_COLOR if self.app == 'radarr' else CinemaTheme.SONARR_COLOR};")
-        header.addWidget(icon_label)
-        
         name_label = QLabel(self.instance.name)
         name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: white;")
         header.addWidget(name_label, stretch=1)
@@ -2180,7 +2254,7 @@ class InstanceCard(QFrame):
         
         # URL
         url_text = self.instance.base_url or "Non configuré"
-        url_label = QLabel(f"🔗 {url_text}")
+        url_label = QLabel(f"URL: {url_text}")
         url_label.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 12px;")
         url_label.setWordWrap(True)
         layout.addWidget(url_label)
@@ -2191,11 +2265,11 @@ class InstanceCard(QFrame):
         includes_count = len(self.instance.includes)
         cf_count = len(self.instance.custom_formats)
         
-        includes_label = QLabel(f"📋 {includes_count} includes")
+        includes_label = QLabel(f"Includes: {includes_count}")
         includes_label.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 11px;")
         stats_layout.addWidget(includes_label)
         
-        cf_label = QLabel(f"🎯 {cf_count} CFs")
+        cf_label = QLabel(f"CFs: {cf_count}")
         cf_label.setStyleSheet(f"color: {CinemaTheme.TEXT_SECONDARY}; font-size: 11px;")
         stats_layout.addWidget(cf_label)
         
@@ -2205,12 +2279,12 @@ class InstanceCard(QFrame):
         # Boutons
         buttons_layout = QHBoxLayout()
         
-        edit_btn = QPushButton("✏️ Modifier")
+        edit_btn = QPushButton("Modifier")
         edit_btn.setObjectName("secondary")
         edit_btn.clicked.connect(self.on_edit)
         buttons_layout.addWidget(edit_btn)
         
-        delete_btn = QPushButton("🗑️")
+        delete_btn = QPushButton("Supprimer")
         delete_btn.setObjectName("danger")
         delete_btn.clicked.connect(self.on_delete)
         buttons_layout.addWidget(delete_btn)
@@ -2236,8 +2310,8 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Recyclarr Config Generator - Home Cinema Edition")
-        self.setMinimumSize(1400, 900)
+        self.setWindowTitle("Recyclarr Configurator")
+        self.setMinimumSize(1500, 1000)
         
         self.data_manager = DataManager()
         self.yaml_generator = YAMLGenerator(self.data_manager)
@@ -2258,17 +2332,17 @@ class MainWindow(QMainWindow):
         # Header
         header = QHBoxLayout()
         
-        title = QLabel("🎬 Recyclarr Config Generator")
+        title = QLabel("Recyclarr Configurator")
         title.setObjectName("title")
         header.addWidget(title)
         
         header.addStretch()
         
-        preview_btn = QPushButton("👁️ Prévisualiser YAML")
+        preview_btn = QPushButton("Prévisualiser YAML")
         preview_btn.clicked.connect(self.generate_preview)
         header.addWidget(preview_btn)
         
-        save_btn = QPushButton("💾 Sauvegarder YAML")
+        save_btn = QPushButton("Sauvegarder YAML")
         save_btn.clicked.connect(self.save_yaml)
         header.addWidget(save_btn)
         
@@ -2284,12 +2358,12 @@ class MainWindow(QMainWindow):
         
         # Section Radarr
         radarr_header = QHBoxLayout()
-        radarr_title = QLabel("🎬 RADARR - Films")
+        radarr_title = QLabel("RADARR - Films")
         radarr_title.setObjectName("radarr-label")
         radarr_header.addWidget(radarr_title)
         radarr_header.addStretch()
         
-        add_radarr_btn = QPushButton("➕ Ajouter")
+        add_radarr_btn = QPushButton("Ajouter")
         add_radarr_btn.setObjectName("secondary")
         add_radarr_btn.setStyleSheet(f"""
             QPushButton {{
@@ -2322,12 +2396,12 @@ class MainWindow(QMainWindow):
         
         # Section Sonarr
         sonarr_header = QHBoxLayout()
-        sonarr_title = QLabel("📺 SONARR - Séries")
+        sonarr_title = QLabel("SONARR - Séries")
         sonarr_title.setObjectName("sonarr-label")
         sonarr_header.addWidget(sonarr_title)
         sonarr_header.addStretch()
         
-        add_sonarr_btn = QPushButton("➕ Ajouter")
+        add_sonarr_btn = QPushButton("Ajouter")
         add_sonarr_btn.setObjectName("secondary")
         add_sonarr_btn.setStyleSheet(f"""
             QPushButton {{
@@ -2365,7 +2439,7 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(12)
         
-        preview_header = QLabel("📄 Prévisualisation YAML")
+        preview_header = QLabel("Prévisualisation YAML")
         preview_header.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
         right_layout.addWidget(preview_header)
         
@@ -2400,7 +2474,7 @@ class MainWindow(QMainWindow):
             radarr_count = len(self.data_manager.get_custom_formats_for_app("radarr"))
             sonarr_count = len(self.data_manager.get_custom_formats_for_app("sonarr"))
             self.status_bar.showMessage(
-                f"✅ Données chargées - {radarr_count} CFs Radarr, {sonarr_count} CFs Sonarr disponibles"
+                f"Données chargées - {radarr_count} CFs Radarr, {sonarr_count} CFs Sonarr disponibles"
             )
     
     def add_instance(self, app: str):
@@ -2415,7 +2489,7 @@ class MainWindow(QMainWindow):
                 self.config.sonarr_instances.append(instance)
                 self.refresh_sonarr_cards()
             
-            self.status_bar.showMessage(f"✅ Instance '{instance.name}' ajoutée avec succès")
+            self.status_bar.showMessage(f"Instance '{instance.name}' ajoutée avec succès")
     
     def edit_instance(self, app: str, instance: InstanceConfig):
         """Édite une instance existante."""
@@ -2432,7 +2506,7 @@ class MainWindow(QMainWindow):
             else:
                 self.refresh_sonarr_cards()
             
-            self.status_bar.showMessage(f"✅ Instance '{dialog.result_instance.name}' modifiée")
+            self.status_bar.showMessage(f"Instance '{dialog.result_instance.name}' modifiée")
     
     def delete_instance(self, app: str, instance: InstanceConfig):
         """Supprime une instance."""
@@ -2452,7 +2526,7 @@ class MainWindow(QMainWindow):
                 self.config.sonarr_instances.remove(instance)
                 self.refresh_sonarr_cards()
             
-            self.status_bar.showMessage(f"🗑️ Instance '{instance.name}' supprimée")
+            self.status_bar.showMessage(f"Instance '{instance.name}' supprimée")
     
     def refresh_radarr_cards(self):
         """Rafraîchit l'affichage des cartes Radarr."""
@@ -2491,7 +2565,7 @@ class MainWindow(QMainWindow):
         
         radarr_count = len(self.config.radarr_instances)
         sonarr_count = len(self.config.sonarr_instances)
-        self.status_bar.showMessage(f"📄 Prévisualisation générée - {radarr_count} Radarr, {sonarr_count} Sonarr")
+        self.status_bar.showMessage(f"Prévisualisation générée - {radarr_count} Radarr, {sonarr_count} Sonarr")
     
     def save_yaml(self):
         """Sauvegarde le fichier YAML."""
@@ -2517,7 +2591,7 @@ class MainWindow(QMainWindow):
                     "Succès",
                     f"Configuration sauvegardée dans:\n{file_path}"
                 )
-                self.status_bar.showMessage(f"💾 Fichier sauvegardé: {file_path}")
+                self.status_bar.showMessage(f"Fichier sauvegardé: {file_path}")
             except Exception as e:
                 QMessageBox.critical(
                     self,
