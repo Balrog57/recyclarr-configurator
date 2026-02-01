@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QListWidget, 
                                QListWidgetItem, QLabel, QSpinBox, QCheckBox, QGroupBox, QLineEdit,
-                               QTableWidget, QTableWidgetItem, QHeaderView)
+                               QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit)
 from PySide6.QtCore import Qt
 from core.models import CustomFormatAssignment
 
@@ -57,10 +57,10 @@ class CFEditor(QWidget):
         self.lbl_name.setProperty("class", "h4")
         details_layout.addWidget(self.lbl_name)
         
-        self.lbl_desc = QLabel("Description...")
-        self.lbl_desc.setWordWrap(True)
-        self.lbl_desc.setStyleSheet("color: #888; font-style: italic;")
-        details_layout.addWidget(self.lbl_desc)
+        self.desc_text = QTextEdit()
+        self.desc_text.setReadOnly(True)
+        self.desc_text.setStyleSheet("color: #aaa; font-style: italic; background: transparent; border: none;")
+        details_layout.addWidget(self.desc_text, 1) # Stretch 1/3
 
         # Default Score Display
         self.lbl_default_score = QLabel("(Score par défaut: 0)")
@@ -76,12 +76,18 @@ class CFEditor(QWidget):
         self.profile_table.setColumnCount(3)
         self.profile_table.setHorizontalHeaderLabels(["Profil", "Actif", "Score"])
         self.profile_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.profile_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.profile_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.profile_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self.profile_table.setColumnWidth(1, 60) # Fixed width for Checkbox
+        self.profile_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self.profile_table.setColumnWidth(2, 130) # Wider for -10000
+        
         self.profile_table.verticalHeader().setVisible(False)
-        self.profile_table.setSelectionMode(QTableWidget.NoSelection) # Rows not selectable
-        self.profile_table.itemChanged.connect(self.on_table_item_changed)
-        details_layout.addWidget(self.profile_table)
+        self.profile_table.verticalHeader().setDefaultSectionSize(40) # Ensure height for SpinBox
+        self.profile_table.setSelectionMode(QTableWidget.NoSelection)
+        self.profile_table.setFocusPolicy(Qt.NoFocus) # Remove cell focus/blue box
+        # self.profile_table.itemChanged.connect(self.on_table_item_changed) # Removed to avoid conflict with cell widgets
+        
+        details_layout.addWidget(self.profile_table, 2) # Stretch 2/3
         
         self.details_panel.setLayout(details_layout)
         
@@ -113,7 +119,7 @@ class CFEditor(QWidget):
         self.profile_table.blockSignals(True)
 
         self.lbl_name.setText(cf_data.get('name'))
-        self.lbl_desc.setText(cf_data.get('description', ''))
+        self.desc_text.setText(cf_data.get('description', ''))
         
         # Default score logic
         trash_scores = cf_data.get('trash_scores', {})
@@ -131,54 +137,80 @@ class CFEditor(QWidget):
             name_item.setFlags(Qt.ItemIsEnabled) # Read only
             self.profile_table.setItem(i, 0, name_item)
             
-            # 2. Checkbox (Active)
-            check_item = QTableWidgetItem()
-            check_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            check_item.setCheckState(Qt.Unchecked)
+            # 2. Checkbox (Active) - Using Cell Widget for centering and styling
+            container = QWidget()
+            c_layout = QHBoxLayout(container)
+            c_layout.setContentsMargins(0,0,0,0)
+            c_layout.setAlignment(Qt.AlignCenter)
+            
+            chk = QCheckBox()
+            # Style: White box when unchecked (visible), Standard accent when checked
+            chk.setStyleSheet("""
+                QCheckBox::indicator { 
+                    width: 20px; 
+                    height: 20px; 
+                    background-color: white; 
+                    border: 1px solid #666; 
+                    border-radius: 4px;
+                }
+                QCheckBox::indicator:checked { 
+                    background-color: #d35400; 
+                    border: 1px solid #d35400;
+                    image: none;
+                }
+            """)
+            # Note: Checking the box will turn it Orange (accent).
+            
+            c_layout.addWidget(chk)
+            self.profile_table.setCellWidget(i, 1, container)
             
             # 3. Score Spinbox
             spin = QSpinBox()
             spin.setRange(-10000, 10000)
-            spin.setValue(default_score)
             spin.setEnabled(False) # Disabled by default until checked
             
             # Determine state from active assignment
-            if current_assignment:
-                # Legacy support (if migrated from old model in memory) or New Model
-                # Check new profile_scores list
-                p_score_entry = next((x for x in current_assignment.profile_scores if x.get('name') == p_name), None)
-                
-                if p_score_entry:
-                    check_item.setCheckState(Qt.Checked)
-                    spin.setValue(p_score_entry.get('score', default_score))
-                    spin.setEnabled(True)
-                # Fallback to old "profiles" list if profile_scores is empty?
-                elif not current_assignment.profile_scores and p_name in current_assignment.profiles:
-                    check_item.setCheckState(Qt.Checked)
-                    spin.setValue(current_assignment.score)
-                    spin.setEnabled(True)
             
-            self.profile_table.setItem(i, 1, check_item)
+            inferred_score = self._infer_score(cf_data, p_name, default_score)
+            final_val = inferred_score
+            is_active = False
+            
+            if current_assignment:
+                # Check explicit assignment first
+                p_score_entry = next((x for x in current_assignment.profile_scores if x.get('name') == p_name), None)
+                if p_score_entry:
+                    final_val = p_score_entry.get('score', default_score)
+                    is_active = True
+                # Fallback to legacy
+                elif not current_assignment.profile_scores and p_name in current_assignment.profiles:
+                    final_val = current_assignment.score
+                    is_active = True
+            
+            # If not explicitly active but inferred score is different from default
+            if not is_active and inferred_score != default_score:
+                 final_val = inferred_score
+                 is_active = True
+
+            spin.setValue(final_val)
+            chk.setChecked(is_active)
+            spin.setEnabled(is_active)
+            
             self.profile_table.setCellWidget(i, 2, spin)
             
             # Connect signals
-            # We need a lambda or helper to capture row index? 
-            # Or simplified: connect to cellChanged is easier for checkbox.
-            # For spinbox, we need to bind.
+            # Use lambdas to capture current row content effectively or just trigger update
+            chk.stateChanged.connect(lambda state, r=i: self.on_checkbox_toggled(r, state))
             spin.valueChanged.connect(self.update_model)
 
         self.profile_table.blockSignals(False)
         
         
-    def on_table_item_changed(self, item):
-        # If checkbox column (1) changed
-        if item.column() == 1:
-            row = item.row()
-            is_checked = (item.checkState() == Qt.Checked)
-            spin_widget = self.profile_table.cellWidget(row, 2)
-            if spin_widget:
-                spin_widget.setEnabled(is_checked)
-            self.update_model()
+    def on_checkbox_toggled(self, row, state):
+        is_checked = (state == Qt.Checked) or (state == 2) # Qt.Checked is 2
+        spin_widget = self.profile_table.cellWidget(row, 2)
+        if spin_widget:
+            spin_widget.setEnabled(is_checked)
+        self.update_model()
         
     def update_model(self):
         # Save current table state to active_assignments
@@ -196,9 +228,14 @@ class CFEditor(QWidget):
         profile_scores = []
         
         for i in range(self.profile_table.rowCount()):
-            # Checkbox is col 1
-            check_item = self.profile_table.item(i, 1)
-            if check_item and check_item.checkState() == Qt.Checked:
+            # Checkbox is in CellWidget at col 1
+            container = self.profile_table.cellWidget(i, 1)
+            if not container or not container.layout() or container.layout().count() == 0:
+                continue
+                
+            chk = container.layout().itemAt(0).widget()
+            
+            if chk and chk.isChecked():
                 p_name = self.profile_table.item(i, 0).text()
                 spin = self.profile_table.cellWidget(i, 2)
                 val = spin.value()
@@ -267,7 +304,7 @@ class CFEditor(QWidget):
 
                 # Build profile_scores for THIS specific CF based on template assignments
                 profile_scores = []
-                assignments = entry.get("assign_scores_to", [])
+                assignments = entry.get("assign_scores_to") or []
                 
                 for assign in assignments:
                     a_name = assign.get("name")
@@ -320,18 +357,22 @@ class CFEditor(QWidget):
             # Remove 'french' from key as it's common prefix for FR profiles?
             k_norm = key.lower()
             
-            # 1. Exact containment
-            if k_norm in p_norm:
+            # 0. Alias substitution (french -> fr)
+            k_alias = k_norm.replace("french", "fr")
+            
+            # 1. Exact containment (with or without alias)
+            if k_norm in p_norm or k_alias in p_norm:
                 return sc
                 
             # 2. Token overlap
             # Split key by '-' and check if ALL tokens map to the profile
-            tokens = [t for t in k_norm.split('-') if t not in ['french', 'hq', 'hd']] # filter common words?
+            # We use the alias version to match "fr" tokens if needed
+            tokens = [t for t in k_alias.split('-') if t not in ['hq', 'hd']] 
             if tokens and all(t in p_norm for t in tokens):
                 return sc
                 
-            # 3. Special case fallback for "vostfr" etc if the key is just short
-            if k_norm in ["vostfr", "vf", "vo"] and k_norm in p_norm.split("-"):
+            # 3. Special case fallback 
+            if k_alias in ["vostfr", "vf", "vo"] and k_alias in p_norm.split("-"):
                  return sc
 
         return best_match_score

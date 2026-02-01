@@ -94,7 +94,15 @@ class DataManager:
 
     def get_include_data(self, app: str, include_name: str) -> Optional[Dict]:
         """Retrieves the full data/content of a specific include by name."""
-        # We don't know the type, so we search all include categories
+        # Search all include categories for the app
+        includes_map = self.get_app_includes(app)
+        if not includes_map: return None
+        
+        for inc_type, inc_list in includes_map.items():
+            for item in inc_list:
+                if item.get("name") == include_name:
+                    return item
+        return None
     def get_any_template_or_include(self, app: str, name: str) -> Optional[Dict]:
         """Finds a template or include by name from any source."""
         # 1. Check top-level templates
@@ -116,13 +124,14 @@ class DataManager:
         collected_cfs = []
         
         # 1. Add CFs from the root template itself
-        if "custom_formats" in root_template:
+        if "custom_formats" in root_template and root_template["custom_formats"]:
             collected_cfs.extend(root_template["custom_formats"])
             
         # 2. Process includes
         # We need to loop carefully to avoid infinite recursion if there are cycles (unlikely but safe)
         processed_names = {root_template.get("name")}
-        queue = [inc.get("template") for inc in root_template.get("include", []) if inc.get("template")]
+        root_includes = root_template.get("include") or []
+        queue = [inc.get("template") for inc in root_includes if inc.get("template")]
         
         while queue:
             next_name = queue.pop(0)
@@ -133,7 +142,7 @@ class DataManager:
             if not item: continue
             
             # Add CFs from this included item
-            if "custom_formats" in item:
+            if "custom_formats" in item and item["custom_formats"]:
                 collected_cfs.extend(item["custom_formats"])
             
             # If this item has its own includes, add them to queue (BFS)
@@ -149,7 +158,7 @@ class DataManager:
             # Now allow recursion
             # Note: Recyclarr templates usually don't nest 'include' inside 'includes' section deeply, 
             # but top-level templates do include other templates.
-            if "include" in data_node:
+            if "include" in data_node and data_node["include"]:
                 for inc in data_node["include"]:
                     t_name = inc.get("template")
                     if t_name: queue.append(t_name)

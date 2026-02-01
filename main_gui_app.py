@@ -223,12 +223,18 @@ class InstanceEditor(QWidget):
             if app_content:
                 config_key = list(app_content.keys())[0]
                 config_data = app_content[config_key]
-                root_cfs = config_data.get("custom_formats", [])
-                resolved_cfs.extend(root_cfs)
+                if config_data:
+                    root_cfs = config_data.get("custom_formats") or []
+                    if isinstance(root_cfs, list):
+                        resolved_cfs.extend(root_cfs)
+                    else:
+                        logger.warning(f"Ignored non-list custom_formats in root template: {type(root_cfs)}")
                 
             self.act3_widget.load_assignments_from_template(resolved_cfs)
         except Exception as e:
+            import traceback
             logger.error(f"Error loading template CFs: {e}")
+            logger.error(traceback.format_exc())
             
         # 3. Update Tab 3 (Profile)
         # Find which include is the quality profile
