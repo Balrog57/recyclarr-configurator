@@ -39,27 +39,29 @@ Chaque instance est configurée en **4 Actes** :
 ### 🎭 Acte 1 : Le Scénario (Templates & Base)
 C'est ici que vous définissez les bases de votre instance.
 *   **Nom de l'instance** : Donnez un nom unique (ex: `radarr-uhd`).
-*   **Connexion** : Cliquez sur ✏️ pour entrer l'URL et l'API Key de votre serveur Radarr/Sonarr.
-*   **Templates** : Sélectionnez un ou plusieurs modèles de configuration pré-existants (basés sur les *Recyclarr Config Templates*).
-    *   *Exemple : `radarr-quality-definition-movie` est essentiel pour définir les qualités.*
+*   **Connexion** : Cliquez sur ✏️ (ou faites clic-droit sur l'onglet) pour entrer l'URL et l'API Key de votre serveur.
+*   **Templates** : Sélectionnez un modèle de base (ex: `radarr-quality-definition-movie`).
 
-### 👯 Acte 2 : Le Casting (Profils de Qualité)
-Créez vos propres profils de qualité.
+### 👯 Acte 2 : Le Casting (Includes)
+Sélectionnez les ingrédients de votre configuration.
+*   **Arbre des Includes** : Cochez les *Quality Definitions* et *Custom Formats* (Trash IDs) que vous souhaitez inclure.
+*   **Visualisation** : L'arbre affiche hiérarchiquement tous les fichiers disponibles depuis les templates.
+
+### 🎬 Acte 3 : Mise en Scène (Profils de Qualité)
+Créez et personnalisez vos profils de qualité (Quality Profiles).
 *   **Nouveau Profil** : Donnez un nom et cliquez sur "Ajouter Profil".
-*   **Paramètres** : Activez *Upgrade Allowed* et définissez le score minimum/limite.
-*   **Groupes de Qualités** : Glissez-déposez les qualités disponibles vers votre profil.
-    *   **Astuce** : Sélectionnez plusieurs qualités avec `Ctrl+Clic` ou `Shift+Clic`, puis clic-droit > "Grouper" pour créer un groupe (ex: `Bluray-1080p` + `WEBDL-1080p` -> `HD-1080p`).
+*   **Glisser-Déposer** : Construisez votre profil en glissant les qualités de la liste de droite vers la gauche.
+*   **Groupement** : Sélectionnez plusieurs qualités (Ctrl+Clic) et faites Clic-Droit > "Grouper" pour créer un groupe personnalisé (ex: `HD-1080p`).
+*   **Paramètres** : Activez *Upgrade Allowed* et définissez le score minimum.
 
-### 🎬 Acte 3 : Mise en Scène (Custom Formats)
-Sélectionnez les formats personnalisés (Custom Formats) issus des **TRaSH Guides**.
-*   **Arbre de gauche** : Naviguez dans les catégories (Audio, Video, Langues...). Cochez les formats que vous voulez utiliser.
-    *   *Note* : L'application scanne désormais récursivement tous les templates inclus pour afficher l'intégralité des formats disponibles, même ceux cachés dans des sous-fichiers.
-*   **Liste de droite** : Ajustez le score de chaque format sélectionné.
-    *   **Smart Inference** : Si un template assigne un format à un profil sans préciser le score, l'application déduit automatiquement le bon score en analysant le nom du profil et les données TRaSH Guides (ex: le profil "FR-VOSTFR" recevra automatiquement le score défini pour "french-vostfr").
-
-### 🎇 Acte 4 : Effets Spéciaux (Settings Avancés)
-Options supplémentaires pour l'instance.
-*   **Manual Configuration** : Ajoutez ici des lignes YAML spécifiques si l'interface ne couvre pas un besoin précis.
+### 🎇 Acte 4 : Effets Spéciaux (Custom Formats)
+L'éditeur avancé pour les formats personnalisés (Custom Formats).
+*   **Visualisation Claire** : Liste filtrable de tous les formats chargés pour l'instance.
+*   **Configuration Détaillée** : 
+    *   **Description** : Zone de texte défilante pour lire les détails complets du format.
+    *   **Tableau des Scores** : Assignez des scores spécifiques pour chaque profil de qualité.
+    *   **Smart Inference** : L'application détecte automatiquement les scores pertinents (ex: `VOSTFR` -> `1000`) même s'ils ne sont pas explicitement liés dans le template, et coche automatiquement la case correspondante.
+    *   **Indicateurs Visuels** : Les cases à cocher "Actif" sont clairement visibles (Carré blanc = inactif, Orange = actif).
 
 ---
 
@@ -72,13 +74,13 @@ Options supplémentaires pour l'instance.
 ---
 
 ## ✨ Fonctionnalités Clés
-*   **Synchronisation Auto** : Les données (CFs, Templates) sont automatiquement mises à jour depuis GitHub au démarrage (désactivable dans le code).
-*   **Mode Sombre** : Interface *Dark Mode* native.
+*   **Synchronisation Auto** : Les données (CFs, Templates) sont automatiquement mises à jour depuis GitHub au démarrage.
+*   **Mode Sombre** : Interface *Dark Mode* native "Director's Cut".
 *   **Icônes Vectorielles** : Utilisation des icônes standards Qt pour une compatibilité maximale.
-*   **Navigation Fluide** : Système d'onglets avancé avec navigation par boutons lorsque vous avez beaucoup d'instances.
+*   **Score Intelligent** : Calcul automatique des scores basé sur les noms de profils (alias `french` -> `fr`).
 
 ---
 
 ## 🆘 Dépannage
 *   **Crash au démarrage ?** Vérifiez votre connexion internet pour la mise à jour des données.
-*   **Boutons invisibles ?** Vérifiez que vous avez bien la dernière version du code (les correctifs d'icônes ont été appliqués).
+*   **Score Tronqué ?** L'interface a été corrigée pour afficher les colonnes de score avec une largeur fixe.

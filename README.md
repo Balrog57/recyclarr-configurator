@@ -15,17 +15,18 @@ Application graphique moderne (PySide6) pour générer des fichiers de configura
 
 Cette version révisée apporte une refonte complète de l'expérience utilisateur, structurée en **4 Actes** pour une configuration intuitive :
 *   **Acte 1 - Le Scénario** : Paramètres de base et Templates.
-*   **Acte 2 - Le Casting** : Création de profils de qualité avancés avec Glisser-Déposer.
-*   **Acte 3 - Mise en Scène** : Sélection visuelle des Custom Formats.
-*   **Acte 4 - Effets Spéciaux** : Réglages fins et personnalisations.
+*   **Acte 2 - Le Casting** : Bibliothèques d'Includes (Custom Formats, Quality Defs).
+*   **Acte 3 - Mise en Scène** : Création de profils de qualité avancés (Glisser-Déposer, Groupes).
+*   **Acte 4 - Effets Spéciaux** : Éditeur de Custom Formats avec inférence intelligente des scores.
 
 ## ✨ Fonctionnalités
 
 *   **🎨 Interface "Dark Cinema"** : Thème sombre immersif et responsive.
 *   **📱 Gestion Multi-Instances** : Onglets dynamiques pour gérer Radarr 4K, Radarr 1080p, Sonarr, etc.
 *   **🔄 Sync Auto** : Téléchargement automatique des dernières données TRaSH Guides au démarrage.
-*   **🧠 Smart Score Inference** : Assignation automatique intelligente des scores pour les formats personnalisés (ex: détecte "VOSTFR" et applique le bon score).
-*   **📂 Template Deep Scan** : Chargement récursif complet de tous les templates et includes, même cachés.
+*   **🧠 Smart Score Inference** : Assignation automatique intelligente des scores pour les formats personnalisés (détecte les alias comme "french" -> "fr" et coche automatiquement les cases pertinentes).
+*   **👁️ Visualisation Améliorée** : Checkbox à contraste élevé et colonnes ajustées pour une lisibilité parfaite.
+*   **📂 Template Deep Scan** : Chargement récursif complet de tous les templates et includes.
 *   **🖱️ Drag & Drop** : Groupement facile des qualités (ex: Bluray + WebDL).
 *   **⚡ Performance** : Navigation fluide et icônes vectorielles standardisées.
 
