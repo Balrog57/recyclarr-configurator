@@ -53,8 +53,9 @@ Créez vos propres profils de qualité.
 ### 🎬 Acte 3 : Mise en Scène (Custom Formats)
 Sélectionnez les formats personnalisés (Custom Formats) issus des **TRaSH Guides**.
 *   **Arbre de gauche** : Naviguez dans les catégories (Audio, Video, Langues...). Cochez les formats que vous voulez utiliser.
+    *   *Note* : L'application scanne désormais récursivement tous les templates inclus pour afficher l'intégralité des formats disponibles, même ceux cachés dans des sous-fichiers.
 *   **Liste de droite** : Ajustez le score de chaque format sélectionné.
-    *   *Important* : Si vous ne donnez pas de score, Recyclarr utilisera le score par défaut du guide TRaSH.
+    *   **Smart Inference** : Si un template assigne un format à un profil sans préciser le score, l'application déduit automatiquement le bon score en analysant le nom du profil et les données TRaSH Guides (ex: le profil "FR-VOSTFR" recevra automatiquement le score défini pour "french-vostfr").
 
 ### 🎇 Acte 4 : Effets Spéciaux (Settings Avancés)
 Options supplémentaires pour l'instance.

@@ -75,6 +75,10 @@ class DataManager:
         """Retrieves templates for a specific application."""
         return self.templates.get(app, {}).get("templates", [])
 
+    def get_app_includes(self, app: str) -> Dict[str, List[Dict]]:
+        """Retrieves the raw 'includes' section (quality-profiles, etc.) for an app."""
+        return self.templates.get(app, {}).get("includes", {})
+
     def get_template_by_name(self, app: str, name: str) -> Optional[Dict]:
         """Retrieves a specific template by its name."""
         templates = self.get_templates_for_app(app)
@@ -87,3 +91,67 @@ class DataManager:
         """Retrieves includes of a specific type."""
         includes = self.templates.get(app, {}).get("includes", {})
         return includes.get(include_type, [])
+
+    def get_include_data(self, app: str, include_name: str) -> Optional[Dict]:
+        """Retrieves the full data/content of a specific include by name."""
+        # We don't know the type, so we search all include categories
+    def get_any_template_or_include(self, app: str, name: str) -> Optional[Dict]:
+        """Finds a template or include by name from any source."""
+        # 1. Check top-level templates
+        for t in self.get_templates_for_app(app):
+            if t.get("name") == name: return t
+            
+        # 2. Check 'includes' section
+        includes_map = self.get_app_includes(app)
+        for _, items in includes_map.items():
+            for item in items:
+                if item.get("name") == name: return item
+        return None
+
+    def resolve_template_includes(self, app: str, root_template: Dict) -> List[Dict]:
+        """
+        Recursively finds all 'custom_formats' from the template and its includes.
+        Returns a merged list of custom_format definitions (the ones inside the template).
+        """
+        collected_cfs = []
+        
+        # 1. Add CFs from the root template itself
+        if "custom_formats" in root_template:
+            collected_cfs.extend(root_template["custom_formats"])
+            
+        # 2. Process includes
+        # We need to loop carefully to avoid infinite recursion if there are cycles (unlikely but safe)
+        processed_names = {root_template.get("name")}
+        queue = [inc.get("template") for inc in root_template.get("include", []) if inc.get("template")]
+        
+        while queue:
+            next_name = queue.pop(0)
+            if next_name in processed_names: continue
+            processed_names.add(next_name)
+            
+            item = self.get_any_template_or_include(app, next_name)
+            if not item: continue
+            
+            # Add CFs from this included item
+            if "custom_formats" in item:
+                collected_cfs.extend(item["custom_formats"])
+            
+            # If this item has its own includes, add them to queue (BFS)
+            # Some includes might be wrapped in 'content' if coming from 'includes' section
+            # But usually 'includes' section items are raw YAML content wrappers. 
+            # We need to check if 'content' exists or if keys are direct.
+            
+            # The 'includes' section items usually look like: 
+            # { "name": "...", "content": { ... } } or just properties.
+            # If it has "content", the useful stuff is inside.
+            data_node = item.get("content", item)
+            
+            # Now allow recursion
+            # Note: Recyclarr templates usually don't nest 'include' inside 'includes' section deeply, 
+            # but top-level templates do include other templates.
+            if "include" in data_node:
+                for inc in data_node["include"]:
+                    t_name = inc.get("template")
+                    if t_name: queue.append(t_name)
+                    
+        return collected_cfs
