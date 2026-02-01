@@ -7,6 +7,8 @@
 **L'outil ultime pour configurer Recyclarr.**
 Application graphique moderne (PySide6) pour générer des fichiers de configuration YAML pour [Recyclarr](https://github.com/recyclarr/recyclarr), optimisée pour les cinéphiles exigeants.
 
+![Interface Screenshot](assets/screenshot.png)
+
 ---
 
 ## 🌟 Nouveautés "Director's Cut"
