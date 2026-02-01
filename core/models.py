@@ -23,9 +23,11 @@ class CustomFormatAssignment:
     trash_id: str
     name: str              # Pour l'affichage UI
     description: str       # Pour le tooltip
-    score: int             # Le score choisi par l'utilisateur
+    score: int             # DEPRECATED/Global score
     default_score: int     # Le score par défaut (référence)
-    profiles: List[str]    # Liste des noms de profils (assign_scores_to)
+    profiles: List[str]    # DEPRECATED
+    # Structure v2 for per-profile scores: [{"name": "ProfileName", "score": 100}, ...]
+    profile_scores: List[Dict] = field(default_factory=list)
 
 @dataclass
 class InstanceConfig:

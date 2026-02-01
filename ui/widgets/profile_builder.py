@@ -37,6 +37,11 @@ class QualitySourceList(QListWidget):
             self.addItem(quality_name)
             self.sortItems()
 
+    def reset_list(self):
+        """Resets the list to show all initial qualities."""
+        self.clear()
+        self.addItems(self.qualities)
+
     def dropEvent(self, event):
         source = event.source()
         # Handle drop from Tree (Removing qualities from profile -> Making available)
@@ -334,11 +339,53 @@ class QualityProfileTree(QTreeWidget):
                 items.append(QualityProfileItem(name=child.text(0), qualities=[]))
         return items
 
+    def clear_tree(self):
+        self.clear()
+    
+    def load_structure(self, items: list):
+        """
+        Loads the tree from a list of dicts (Recyclarr format).
+        items: [{"name": "Group", "qualities": [...]}, {"name": "Quality"}]
+        """
+        self.clear()
+        for entry in items:
+            name = entry.get("name")
+            sub_qualities = entry.get("qualities", [])
+            
+            if sub_qualities:
+                # It is a group
+                group_item = QTreeWidgetItem([name])
+                group_item.setExpanded(True)
+                self.addTopLevelItem(group_item)
+                
+                for q in sub_qualities:
+                    # In Recyclarr json, sub-qualities might be strings or objects?
+                    # Looking at json: "qualities": ["Bluray-1080p Remux", "Bluray-1080p"] -> Strings
+                    # BUT sometimes it might be object? "name": "Bluray-1080p"
+                    # Let's check the json snippet again.
+                    # "qualities": [ "Bluray-1080p Remux", "Bluray-1080p" ]
+                    
+                    if isinstance(q, str):
+                        q_name = q
+                    else:
+                        q_name = q.get("name")
+                        
+                    child = QTreeWidgetItem([q_name])
+                    group_item.addChild(child)
+                    # Emit signal to hide from source list?
+                    self.quality_added.emit(q_name)
+            else:
+                # It is a single quality
+                item = QTreeWidgetItem([name])
+                self.addTopLevelItem(item)
+                self.quality_added.emit(name)
+
 class ProfileBuilder(QWidget):
     """Act 2: Builder."""
     def __init__(self):
         super().__init__()
         self.setup_ui()
+        self.current_profile_name = "Custom Profile"
         
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -390,14 +437,31 @@ class ProfileBuilder(QWidget):
         self.tree.add_group()
 
     def get_profile(self) -> QualityProfile:
-        # For now, we only build the items list. 
-        # The main name and upgrade settings should be in a parent form or top of this widget.
-        # Let's assume this widget just returns the items.
-        # We return a partial object or just the items list.
-        # The prompt asked for "Quality Profile Builder", implying managing one specific profile at a time?
-        # Or creating multiple?
-        # "Ton profil final" -> Singular.
         items = self.tree.get_profile_structure()
-        # Returns a dummy profile wrapper for now, user will fill details like upgrade allowed etc. outside?
-        # Or we add fields here.
-        return QualityProfile(name="Custom Profile", items=items) 
+        return QualityProfile(name=self.current_profile_name, items=items) 
+
+    def load_profile_from_data(self, profile_data: dict):
+        """
+        Loads a profile from data dict (from includes).
+        Expects profile_data['content']['quality_profiles'][0]['qualities'] list.
+        """
+        # 1. Reset everything
+        self.source_list.reset_list()
+        self.tree.clear_tree() # This is crucial
+        
+        # 2. Extract qualities list
+        # Profile data should be the dictionary of the specific profile include content
+        # Structure: {"quality_profiles": [ { "name": "...", "qualities": [...] } ] }
+        
+        q_profiles = profile_data.get("quality_profiles", [])
+        if not q_profiles:
+            return
+            
+        # We assume the first profile in the include is the main one
+        main_profile = q_profiles[0]
+        qualities = main_profile.get("qualities", [])
+        self.current_profile_name = main_profile.get("name", "Custom Profile")
+        
+        # 3. Load into tree
+        # This will emit 'quality_added' signals, which will trigger source_list.hide_quality
+        self.tree.load_structure(qualities)

@@ -156,6 +156,7 @@ class InstanceEditor(QWidget):
             self.combo_mode.addItem(t.get("name", "Unnamed"), t)
             
         gen_layout.addRow("Modèle de Profil:", self.combo_mode)
+        self.combo_mode.currentIndexChanged.connect(self.on_template_changed)
         
         self.tabs.addTab(self.tab_general, "Acte 1 : Scénario")
         
@@ -177,6 +178,76 @@ class InstanceEditor(QWidget):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
         layout.addWidget(self.tabs)
+
+    def on_template_changed(self, index):
+        """Loads template data into other tabs."""
+        if index == 0:
+            return  # Custom/Manuel - Do nothing or clear?
+            
+        template_data = self.combo_mode.itemData(index)
+        if not template_data:
+            return
+            
+        # 1. Update Tab 2 (Includes)
+        includes = template_data.get("includes", [])
+        self.act1_widget.set_selected_includes(includes)
+        
+        # 2. Update Tab 4 (CF Assignments)
+        # Parse content -> app -> instance_key -> custom_formats
+        try:
+            # Recursively resolve ALL custom_formats from includes + template itself
+            merged_cfs = self.data_manager.resolve_template_includes(self.app_type, template_data)
+            
+            # Also check the top-level 'content' for the main template's direct CFs (which resolve_template_includes does, but let's be sure we are looking at the right structure)
+            # resolve_template_includes looks at 'custom_formats' key at root of template/include.
+            # But in 'templates.json', for the main template, it is nested in 'content -> app -> [config] -> custom_formats'.
+            # Wait, resolve_template_includes expects the dict having 'custom_formats'.
+            
+            # For the main template, we need to extract the 'custom_formats' list from the nested structure FIRST, 
+            # OR pass the nested structure as a "virtual include"?
+            
+            # Actually, let's look at a template structure:
+            # { "name": ..., "includes": [...], "content": { "sonarr": { "hd-bluray-web": { "custom_formats": [...] } } } }
+            
+            # My resolve_template_includes checks `root_template["custom_formats"]`.
+            # So for the root template, I need to extract the CFs from the content first and pass it, OR update logic.
+            # But included templates (raw includes) often have `custom_formats` at top level (for CF includes) OR inside content (for profile bundles).
+            
+            # Let's simple append the root template's nested CFs manually to the resolved list from includes.
+            
+            # 1. Get Includes CFs
+            resolved_cfs = self.data_manager.resolve_template_includes(self.app_type, template_data)
+            
+            # 2. Get Root Template CFs (if any, nested in content)
+            app_content = template_data.get("content", {}).get(self.app_type, {})
+            if app_content:
+                config_key = list(app_content.keys())[0]
+                config_data = app_content[config_key]
+                root_cfs = config_data.get("custom_formats", [])
+                resolved_cfs.extend(root_cfs)
+                
+            self.act3_widget.load_assignments_from_template(resolved_cfs)
+        except Exception as e:
+            logger.error(f"Error loading template CFs: {e}")
+            
+        # 3. Update Tab 3 (Profile)
+        # Find which include is the quality profile
+        # Heuristic: contains "quality-profile" in name
+        qp_include_name = next((inc for inc in includes if "quality-profile" in inc), None)
+        
+        if qp_include_name:
+            # Fetch the definition from DataManager
+            profile_def = self.data_manager.get_include_data(self.app_type, qp_include_name)
+            if profile_def and "content" in profile_def:
+                try:
+                    self.act2_widget.load_profile_from_data(profile_def["content"])
+                    # Update available profiles in CF Editor immediately
+                    current_profile = self.act2_widget.get_profile()
+                    p_name = current_profile.name if current_profile else "Unknown"
+                    self.act3_widget.set_available_profiles([p_name])
+                except Exception as e:
+                    logger.error(f"Error loading profile builder: {e}")
+
         
     def edit_connection_info(self):
         """Opens dialog to edit URL and Key."""
@@ -193,9 +264,30 @@ class InstanceEditor(QWidget):
     def on_tab_changed(self, index):
         # Refresh CF Editor profiles when switching to Tab 4 (Index 3)
         if index == 3: 
+            # 1. Get Custom Profile from Act 3
             input_profile = self.act2_widget.get_profile()
-            profile_names = [input_profile.name] if input_profile else []
-            self.act3_widget.set_available_profiles(profile_names)
+            profile_names = {input_profile.name} if input_profile and input_profile.name != "Custom Profile" else set()
+            
+            # 2. Get Selected Includes from Act 2 that are Quality Profiles
+            selected_includes = self.act1_widget.get_selected_templates()
+            for inc_name in selected_includes:
+                # Heuristic: Name contains "quality-profile"
+                if "quality-profile" in inc_name.lower():
+                    # Check if we can get the real profile name from data manager
+                    # Loop up include data
+                    inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
+                    if inc_data and "content" in inc_data:
+                        qp_list = inc_data["content"].get("quality_profiles", [])
+                        for qp in qp_list:
+                             if "name" in qp:
+                                 profile_names.add(qp["name"])
+                    else:
+                        # Fallback: try to guess from include name? Or just use include name?
+                        # Recyclarr usually defines the profile name in the content.
+                        pass
+
+            # Update Tab 4
+            self.act3_widget.set_available_profiles(sorted(list(profile_names)))
 
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""

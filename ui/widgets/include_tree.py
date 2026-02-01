@@ -58,52 +58,39 @@ class IncludeTreeWidget(QWidget):
         
         root_defs = QTreeWidgetItem(self.tree, ["Définitions de Qualité"])
         root_defs.setExpanded(True)
+        root_defs.setFlags(root_defs.flags() & ~Qt.ItemIsUserCheckable)
         
         root_profiles = QTreeWidgetItem(self.tree, ["Profils Préfabriqués"])
         root_profiles.setExpanded(True)
+        root_profiles.setFlags(root_profiles.flags() & ~Qt.ItemIsUserCheckable)
         
         root_cfs = QTreeWidgetItem(self.tree, ["Packs de Formats (Custom Formats)"])
         root_cfs.setExpanded(True)
+        root_cfs.setFlags(root_cfs.flags() & ~Qt.ItemIsUserCheckable)
         
-        root_templates = QTreeWidgetItem(self.tree, ["Templates Complets (Bundles)"])
-        root_templates.setExpanded(True)
-        
-        others = QTreeWidgetItem(self.tree, ["Autres"])
-
         # Set of already added IDs to avoid duplicates
         added_ids = set()
 
-        # 1. First, add the Top-Level Templates (Bundles)
-        for template in templates:
-            name = template.get("name", template.get("id", "Unknown"))
-            description = template.get("description", "")
-            
-            if name in added_ids: continue
-            
-            item = QTreeWidgetItem([name])
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setToolTip(0, description)
-            
-            if current_config and name in current_config.includes:
-                item.setCheckState(0, Qt.Checked)
-            else:
-                item.setCheckState(0, Qt.Unchecked)
-            
-            item.setData(0, Qt.UserRole, name)
-            root_templates.addChild(item)
-            added_ids.add(name)
-
-        # 2. Now extract all granual includes from these templates
-        # We want to list ALL possibilities Recyclarr knows about.
-        # However, templates.json ONLY lists the composite templates.
-        # It DOES NOT list the available "raw" includes like 'radarr-quality-definition-sqp-1' as separate searchable objects with descriptions.
-        # But we can find them listed inside the 'includes' list of the templates.
-        
+        # 2. Extract ALL possible templates/includes.
         unique_includes = set()
+        
+        # 1. Bundled Templates & their includes
         for t in templates:
+            name = t.get("name")
+            if name: unique_includes.add(name)
             for inc in t.get("includes", []):
                 unique_includes.add(inc)
-                
+
+        # 2. Raw/Orphan Includes (quality-defs, quality-profiles, etc.)
+        raw_includes_data = self.data_manager.get_app_includes(app_name)
+        # Defines mappings: key in JSON -> loop over items -> add 'name'
+        # keys: "quality-definitions", "quality-profiles", "custom-formats"
+        for category_key, items in raw_includes_data.items():
+            for item in items:
+                name = item.get("name")
+                if name:
+                    unique_includes.add(name)
+
         # Now add these unique includes to the tree
         for inc_name in sorted(list(unique_includes)):
             if inc_name in added_ids: continue
@@ -127,10 +114,10 @@ class IncludeTreeWidget(QWidget):
                 root_defs.addChild(item)
             elif "quality-profile" in lower:
                 root_profiles.addChild(item)
-            elif "custom-formats" in lower:
+            elif "custom-format" in lower:
                 root_cfs.addChild(item)
             else:
-                others.addChild(item)
+                continue
             
             added_ids.add(inc_name)
 
@@ -145,6 +132,23 @@ class IncludeTreeWidget(QWidget):
                 selected.append(template_id)
             iterator += 1
         return selected
+
+    def set_selected_includes(self, includes_list: list[str]):
+        """Programmatically select items based on a list of IDs."""
+        self.tree.blockSignals(True)
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            item = iterator.value()
+            # If item is a leaf/selectable
+            if item.flags() & Qt.ItemIsUserCheckable:
+                template_id = item.data(0, Qt.UserRole)
+                if template_id in includes_list:
+                    item.setCheckState(0, Qt.Checked)
+                else:
+                    item.setCheckState(0, Qt.Unchecked)
+            iterator += 1
+        self.tree.blockSignals(False)
+        self.selection_changed.emit()
 
     def _on_item_changed(self, item, column):
         self.selection_changed.emit()

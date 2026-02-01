@@ -22,6 +22,8 @@ Cette version révisée apporte une refonte complète de l'expérience utilisate
 *   **🎨 Interface "Dark Cinema"** : Thème sombre immersif et responsive.
 *   **📱 Gestion Multi-Instances** : Onglets dynamiques pour gérer Radarr 4K, Radarr 1080p, Sonarr, etc.
 *   **🔄 Sync Auto** : Téléchargement automatique des dernières données TRaSH Guides au démarrage.
+*   **🧠 Smart Score Inference** : Assignation automatique intelligente des scores pour les formats personnalisés (ex: détecte "VOSTFR" et applique le bon score).
+*   **📂 Template Deep Scan** : Chargement récursif complet de tous les templates et includes, même cachés.
 *   **🖱️ Drag & Drop** : Groupement facile des qualités (ex: Bluray + WebDL).
 *   **⚡ Performance** : Navigation fluide et icônes vectorielles standardisées.
 
