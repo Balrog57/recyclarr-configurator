@@ -1,86 +1,85 @@
-# 📖 Documentation Recyclarr Configurator - Director's Cut
+# 📖 Recyclarr Configurator Documentation - Director's Cut
 
-Application moderne en Python et PySide6 pour créer et gérer facilement vos fichiers de configuration `recyclarr.yml` pour Radarr et Sonarr. Suivez ce guide pour installer et utiliser l'application.
+A modern Python and PySide6 application to easily create and manage your `recyclarr.yml` configuration files for Radarr and Sonarr. Follow this guide to install and use the application.
 
 ---
 
-## 🚀 Installation & Lancement
+## 🚀 Installation & Launch
 
-### Prérequis
-*   **Python 3.8+** installé sur votre machine.
-*   **pip** (gestionnaire de paquets Python).
+### Prerequisites
+*   **Python 3.8+** installed on your machine.
+*   **pip** (Python package manager).
 
-### 1. Cloner ou Télécharger
-Récupérez les fichiers sources du projet dans un dossier sur votre ordinateur.
+### 1. Clone or Download
+Download the project source files into a folder on your computer.
 
-### 2. Installer les dépendances
-Ouvrez un terminal (PowerShell sous Windows) dans le dossier du projet et lancez :
+### 2. Install Dependencies
+Open a terminal (PowerShell on Windows) in the project folder and run:
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 3. Lancer l'application
-Toujours depuis le dossier du projet :
+### 3. Launch the Application
+From the project folder:
 ```powershell
 python main_gui_app.py
 ```
-*(L'ancien fichier `recyclarr_gui.py` est obsolète, utilisez `main_gui_app.py`)*
 
-> **Note :** Au premier lancement, l'application peut prendre quelques instants pour télécharger les dernières données de TRaSH Guides et Recyclarr.
-
----
-
-## 🎬 Guide d'Utilisation - Les 4 Actes
-
-L'interface est découpée en **Onglets (Instances)**. Vous pouvez avoir plusieurs onglets pour gérer par exemple `Radarr 4K`, `Radarr 1080p`, `Sonarr Anime`, etc.
-
-Chaque instance est configurée en **4 Actes** :
-
-### 🎭 Acte 1 : Le Scénario (Templates & Base)
-C'est ici que vous définissez les bases de votre instance.
-*   **Nom de l'instance** : Donnez un nom unique (ex: `radarr-uhd`).
-*   **Connexion** : Cliquez sur ✏️ (ou faites clic-droit sur l'onglet) pour entrer l'URL et l'API Key de votre serveur.
-*   **Templates** : Sélectionnez un modèle de base (ex: `radarr-quality-definition-movie`).
-
-### 👯 Acte 2 : Le Casting (Includes)
-Sélectionnez les ingrédients de votre configuration.
-*   **Arbre des Includes** : Cochez les *Quality Definitions* et *Custom Formats* (Trash IDs) que vous souhaitez inclure.
-*   **Visualisation** : L'arbre affiche hiérarchiquement tous les fichiers disponibles depuis les templates.
-
-### 🎬 Acte 3 : Mise en Scène (Profils de Qualité)
-Créez et personnalisez vos profils de qualité (Quality Profiles).
-*   **Nouveau Profil** : Donnez un nom et cliquez sur "Ajouter Profil".
-*   **Glisser-Déposer** : Construisez votre profil en glissant les qualités de la liste de droite vers la gauche.
-*   **Groupement** : Sélectionnez plusieurs qualités (Ctrl+Clic) et faites Clic-Droit > "Grouper" pour créer un groupe personnalisé (ex: `HD-1080p`).
-*   **Paramètres** : Activez *Upgrade Allowed* et définissez le score minimum.
-
-### 🎇 Acte 4 : Effets Spéciaux (Custom Formats)
-L'éditeur avancé pour les formats personnalisés (Custom Formats).
-*   **Visualisation Claire** : Liste filtrable de tous les formats chargés pour l'instance.
-*   **Configuration Détaillée** : 
-    *   **Description** : Zone de texte défilante pour lire les détails complets du format.
-    *   **Tableau des Scores** : Assignez des scores spécifiques pour chaque profil de qualité.
-    *   **Smart Inference** : L'application détecte automatiquement les scores pertinents (ex: `VOSTFR` -> `1000`) même s'ils ne sont pas explicitement liés dans le template, et coche automatiquement la case correspondante.
-    *   **Indicateurs Visuels** : Les cases à cocher "Actif" sont clairement visibles (Carré blanc = inactif, Orange = actif).
+> **Note:** On the first launch, the application may take a moment to download the latest data from TRaSH Guides and Recyclarr.
 
 ---
 
-## 🛠️ Barre d'Outils (Haut à Droite)
-*   **Navigation** : Utilisez les flèches `◀` et `▶` pour passer d'une instance à l'autre.
-*   **+ Ajouter** : Crée une nouvelle instance (Radarr ou Sonarr).
-*   **Supprimer** : Supprime l'instance (onglet) actuelle.
-*   **Générer YAML** : C'est le but final ! Cliquez pour générer le fichier `recyclarr.yml` complet basé sur tous vos onglets.
+## 🎬 User Guide - The 4 Acts
+
+The interface is divided into **Tabs (Instances)**. You can have multiple tabs to manage, for example, `Radarr 4K`, `Radarr 1080p`, `Sonarr Anime`, etc.
+
+Each instance is configured in **4 Acts**:
+
+### 🎭 Act 1: The Script (Templates & Base)
+This is where you define the foundation of your instance.
+*   **Instance Name**: Give it a unique name (e.g., `radarr-uhd`).
+*   **Connection**: Right-click on the tab to enter your server's URL and API Key.
+*   **Templates**: Select a base model (e.g., `radarr-quality-definition-movie`).
+
+### 👯 Act 2: The Casting (Includes)
+Select the ingredients for your configuration.
+*   **Include Tree**: Check the *Quality Definitions* and *Custom Formats* (Trash IDs) you want to include.
+*   **Visualization**: The tree hierarchically displays all files available from the templates.
+
+### 🎬 Act 3: Staging (Quality Profiles)
+Create and customize your Quality Profiles.
+*   **New Profile**: Give it a name and build your list.
+*   **Drag & Drop**: Build your profile by dragging qualities from the right list to the left tree.
+*   **Grouping**: Select multiple qualities and Right-Click > "Group" to create a custom group (e.g., `HD-1080p`).
+*   **Safety**: Individual qualities cannot be nested inside each other; only folders (groups) allow children.
+
+### 🎇 Act 4: Special Effects (Custom Formats)
+The advanced editor for Custom Formats.
+*   **Clear Visualization**: Filterable list of all formats loaded for the instance.
+*   **Detailed Configuration**: 
+    *   **Description**: Scrollable text area to read full format details.
+    *   **Score Table**: Assign specific scores for each quality profile.
+    *   **Smart Inference**: The app automatically detects relevant scores (e.g., `VOSTFR` -> `1000`) based on profile names.
+    *   **YAML Comments**: Names of chosen formats will be added as comments in your final file!
 
 ---
 
-## ✨ Fonctionnalités Clés
-*   **Synchronisation Auto** : Les données (CFs, Templates) sont automatiquement mises à jour depuis GitHub au démarrage.
-*   **Mode Sombre** : Interface *Dark Mode* native "Director's Cut".
-*   **Icônes Vectorielles** : Utilisation des icônes standards Qt pour une compatibilité maximale.
-*   **Score Intelligent** : Calcul automatique des scores basé sur les noms de profils (alias `french` -> `fr`).
+## 🛠️ Toolbar (Top Right)
+*   **Navigation**: Use the `◀` and `▶` arrows to switch between instances.
+*   **+ Add**: Create a new instance (Radarr or Sonarr).
+*   **Delete**: Remove the current instance (tab).
+*   **Generate YAML**: The final goal! Click to generate the complete `recyclarr.yml` file.
 
 ---
 
-## 🆘 Dépannage
-*   **Crash au démarrage ?** Vérifiez votre connexion internet pour la mise à jour des données.
-*   **Score Tronqué ?** L'interface a été corrigée pour afficher les colonnes de score avec une largeur fixe.
+## ✨ Key Features
+*   **Auto-Sync**: Data (CFs, Templates) is automatically updated from GitHub at startup.
+*   **Dark Mode**: Immersive modern "Director's Cut" interface.
+*   **Smart Scoring**: Automatic detection of profile-specific scores.
+*   **Clean Export**: Intelligent grouping in the YAML file for a minimalist and readable configuration.
+
+---
+
+## 🆘 Troubleshooting
+*   **Crash at startup?** Check your internet connection for the initial data update.
+*   **Profiles overlapping?** Use groups to bundle qualities, otherwise they will remain as individual items.
