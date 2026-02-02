@@ -1,5 +1,5 @@
 requests>=2.31.0
 pyyaml>=6.0.1
 PySide6>=6.4.0
-qt-material>=2.14
+
 ruamel.yaml>=0.17.0
