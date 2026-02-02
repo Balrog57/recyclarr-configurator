@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 # Set to True to enable automatic data update from GitHub at startup.
 # Set to False for testing or offline development.
-UPDATE_DATA_ON_STARTUP = False 
+UPDATE_DATA_ON_STARTUP = True 
 
 class InstanceSettingsDialog(QDialog):
     """Dialog to edit Base URL and API Key."""

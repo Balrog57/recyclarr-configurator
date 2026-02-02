@@ -20,6 +20,7 @@ class QualityProfile:
     reset_unmatched_scores: bool = True
     items: List[QualityProfileItem] = field(default_factory=list) # La structure arborescente
     source: str = "custom" # "custom" or "include"
+    active: bool = False
 
 @dataclass
 class CustomFormatAssignment:
