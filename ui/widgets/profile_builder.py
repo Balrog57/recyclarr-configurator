@@ -641,7 +641,9 @@ class QualityProfileManager(QWidget):
             profile.min_format_score = p_data.get("min_format_score", 0)
             profile.score_set = p_data.get("score_set", "")
             profile.quality_sort = p_data.get("quality_sort", "top")
-            profile.active = p_data.get("active", False)
+            # Custom profiles (from YAML) are active by default, Includes (Templates) are inactive
+            default_active = (source == "custom")
+            profile.active = p_data.get("active", default_active)
             
             # Load Qualities Structure
             qualities = p_data.get("qualities", [])

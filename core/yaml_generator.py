@@ -19,6 +19,15 @@ class YAMLGenerator:
         self.yaml.preserve_quotes = True
         self.yaml.indent(mapping=2, sequence=4, offset=2)
 
+    def load_yaml(self, filepath: str) -> Dict[str, Any]:
+        """Loads a YAML file and returns the dictionary."""
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return self.yaml.load(f) or {}
+        except Exception as e:
+            logger.error(f"Failed to load YAML: {e}")
+            raise e
+
     def generate_config(self, config: RecyclarrConfiguration, filename="config.yml") -> str:
         """
         Builds the dictionary from the RecyclarrConfiguration object and saves it to YAML.

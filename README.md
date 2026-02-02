@@ -24,6 +24,7 @@ This revised version brings a complete overhaul of the user experience, structur
 *   **🎨 "Dark Cinema" Interface**: Immersive and responsive dark theme.
 *   **📱 Multi-Instance Management**: Dynamic tabs to manage Radarr 4K, Radarr 1080p, Sonarr, etc.
 *   **🔄 Auto Sync**: Automatically downloads the latest TRaSH Guides data at startup.
+*   **📂 Import Configuration**: Load existing YAML files to modify your setup.
 *   **🧠 Smart Score Inference**: Intelligent score assignment for custom formats (detects aliases like "french" -> "fr").
 *   **💬 YAML Comments**: Automatically adds format names as comments in the generated YAML for better readability.
 *   **🛡️ Quality Protection**: Prevents accidental nesting of qualities in the profile builder (only groups allow nesting).
