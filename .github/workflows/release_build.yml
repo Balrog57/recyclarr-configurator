@@ -1,39 +1,40 @@
 name: Build Release
 
 on:
-    release:
-        types: [created]
-    workflow_dispatch:
+  release:
+    types: [created]
+  workflow_dispatch:
 
 jobs:
-    build:
-        name: Build Portable EXE
-        runs-on: windows-latest
+  build:
+    name: Build Portable EXE
+    runs-on: windows-latest
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Set up Python
-              uses: actions/setup-python@v4
-              with:
-                  python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-            - name: Install dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install -r requirements.txt
-                  pip install pyinstaller
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pip install Pillow
 
-            - name: Build Application (PyInstaller OneFile)
-              run: |
-                  pyinstaller recyclarr-config.spec --clean
+      - name: Build Application (PyInstaller OneFile)
+        run: |
+          pyinstaller recyclarr-config.spec --clean
 
-            - name: Upload Artifacts to Release
-              uses: ncipollo/release-action@v1
-              with:
-                  allowUpdates: true
-                  artifacts: "dist/RecyclarrConfigurator.exe"
-                  token: ${{ secrets.GITHUB_TOKEN }}
-                  replacesArtifacts: true
-                  tag: ${{ github.ref_name }}
+      - name: Upload Artifacts to Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "dist/RecyclarrConfigurator.exe"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          replacesArtifacts: true
+          tag: ${{ github.ref_name }}
