@@ -1,11 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = [('assets', 'assets')]
 binaries = []
 hiddenimports = []
+
+# Collect all ruamel.yaml dependencies
 tmp_ret = collect_all('ruamel.yaml')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+# Explicitly collect utils submodules as they are imported dynamically/conditionally
+hiddenimports += collect_submodules('utils')
+hiddenimports += ['core', 'ui']
 
 block_cipher = None
 
@@ -37,7 +43,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False, # Disable UPX for GitHub Actions reliability
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
