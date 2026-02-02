@@ -2,6 +2,7 @@ import os
 import logging
 from pathlib import Path
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from typing import Dict, Any, List
 
 # Ensure we import the InstanceConfig from our new models
@@ -61,14 +62,16 @@ class YAMLGenerator:
         return app_section
 
     def _generate_instance_config(self, instance: InstanceConfig) -> Dict[str, Any]:
-        """Generates the configuration for a single instance."""
+        """Generates the configuration for a single instance in strict order."""
+        # 1. Base Instance Config
         config = {
             "base_url": instance.base_url if instance.base_url else "http://localhost:7878",
             "api_key": instance.api_key if instance.api_key else "YOUR_API_KEY",
+            "delete_old_custom_formats": instance.delete_old_custom_formats,
+            "replace_existing_custom_formats": instance.replace_existing_custom_formats
         }
 
-        # Includes (templates)
-        # We consolidate all include lists
+        # 2. Includes (templates)
         all_includes = []
         if instance.includes_quality_defs:
             all_includes.extend([{"template": t} for t in instance.includes_quality_defs])
@@ -80,49 +83,6 @@ class YAMLGenerator:
         if all_includes:
             config["include"] = all_includes
 
-        # Custom Formats with Grouping Logic
-        if instance.active_cfs:
-            custom_formats_list = []
-            
-            # Grouping logic: Key = (Score, Tuple(Profiles))
-            # groups = { (score, profiles_tuple): [trash_id1, trash_id2, ...] }
-            groups = {}
-            for cf in instance.active_cfs:
-                # We sort profiles tuple to ensure uniqueness of the key
-                key = (cf.score, tuple(sorted(cf.profiles)))
-                if key not in groups:
-                    groups[key] = []
-                groups[key].append(cf.trash_id)
-            
-            # Create YAML entries from groups
-            for (score, profiles), trash_ids in groups.items():
-                entry = {"trash_ids": trash_ids}
-                
-                # If there are profiles assigned, we use assign_scores_to
-                if profiles:
-                    entry["assign_scores_to"] = [
-                        {"name": p_name, "score": score} for p_name in profiles
-                    ]
-                else:
-                    # Fallback logic if no specific profiles are assigned but a score is set
-                    # This might depend on user intent, but usually we want to assign scores globally if no profile specified?
-                    # Or maybe just set the quality_profiles to empty list. 
-                    # Assuming if no profile is selected, it applies to all? Use cautiously.
-                    # Based on user requets, 'profiles' is the key. 
-                    # If empty, maybe we just set score? (Not standard Recyclarr way unless global)
-                    # Let's keep it simple: if no profiles, we might just list it with score if supported,
-                    # but typically assign_scores_to is preferred. 
-                    # If list is empty, we assume it's just enabled with that score globally or we rely on default.
-                    
-                    # For now, if no profiles, we skip assign_scores_to (using default score or just enabling)
-                    # But if score != default, we might want to specify it. 
-                    # Let's assume the user ALWAYS selects profiles in the UI logic.
-                    pass 
-                
-                custom_formats_list.append(entry)
-
-            config["custom_formats"] = custom_formats_list
-
         # Quality Profiles
         if instance.custom_profiles:
             qp_list = []
@@ -130,15 +90,15 @@ class YAMLGenerator:
                 qp_dict = {
                     "name": qp.name,
                     "reset_unmatched_scores": {
-                        "enabled": True
+                        "enabled": qp.reset_unmatched_scores
                     },
                     "upgrade": {
                         "allowed": qp.upgrade_allowed,
                         "until_quality": qp.upgrade_until,
-                        "until_score": 10000 
+                        "until_score": qp.until_score 
                     },
                     "min_format_score": qp.min_format_score,
-                    "quality_sort": "top",
+                    "quality_sort": qp.quality_sort,
                     "score_set": qp.score_set
                 }
                 
@@ -183,5 +143,42 @@ class YAMLGenerator:
                 qp_list.append(qp_dict)
             
             config["quality_profiles"] = qp_list
+            
+        # 4. Custom Formats (AFTER quality_profiles)
+        if instance.active_cfs:
+            custom_formats_list = []
+            
+            # Map for looking up CF names by ID
+            tid_to_name = {cf.trash_id: cf.name for cf in instance.active_cfs}
+            
+            groups = {}
+            for cf in instance.active_cfs:
+                if cf.profile_scores:
+                    assignments = tuple(sorted((p['name'], p['score']) for p in cf.profile_scores))
+                else:
+                    assignments = tuple(sorted((p, cf.score) for p in cf.profiles))
+                
+                if assignments not in groups:
+                    groups[assignments] = []
+                groups[assignments].append(cf.trash_id)
+            
+            for assignments, trash_ids in groups.items():
+                entry = CommentedMap()
+                
+                # Create a commented sequence for trash_ids
+                ids_seq = CommentedSeq(trash_ids)
+                for i, tid in enumerate(trash_ids):
+                    name = tid_to_name.get(tid)
+                    if name:
+                        ids_seq.yaml_add_eol_comment(name, i)
+                
+                entry["trash_ids"] = ids_seq
+                
+                if assignments:
+                    entry["assign_scores_to"] = [
+                        {"name": p_name, "score": score} for p_name, score in assignments
+                    ]
+                custom_formats_list.append(entry)
+            config["custom_formats"] = custom_formats_list
 
         return config

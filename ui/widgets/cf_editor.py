@@ -13,7 +13,8 @@ class CFEditor(QWidget):
         super().__init__()
         self.data = all_formats_data  # Json loaded data (list of dicts)
         self.profiles = available_profiles # List of profile names (strings)
-        self.active_assignments = {} # {trash_id: CustomFormatAssignment}
+        self.active_assignments = {} # {trash_id: CustomFormatAssignment} - MANUAL OVERRIDES
+        self.template_assignments = {} # {trash_id: CustomFormatAssignment} - FROM ACT 2 INCLUDES
         
         self.setup_ui()
 
@@ -21,11 +22,11 @@ class CFEditor(QWidget):
         layout = QVBoxLayout(self)
         
         # Header
-        header_lbl = QLabel("Acte 4 : Les Effets Spéciaux")
+        header_lbl = QLabel("Act 4: Special Effects")
         header_lbl.setProperty("class", "h2")
         layout.addWidget(header_lbl)
         
-        desc_lbl = QLabel("Assignez des scores aux formats personnalisés.")
+        desc_lbl = QLabel("Assign scores to custom formats.")
         desc_lbl.setStyleSheet("color: #888; margin-bottom: 10px;")
         layout.addWidget(desc_lbl)
         
@@ -37,7 +38,7 @@ class CFEditor(QWidget):
         
         # Search Bar
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Rechercher un format...")
+        self.search_input.setPlaceholderText("Search for a format...")
         self.search_input.textChanged.connect(self.filter_list)
         left_layout.addWidget(self.search_input)
         
@@ -50,10 +51,10 @@ class CFEditor(QWidget):
         content_layout.addLayout(left_layout, 1)
         
         # 2. Right Panel (Inspector)
-        self.details_panel = QGroupBox("Configuration du Format")
+        self.details_panel = QGroupBox("Format Configuration")
         details_layout = QVBoxLayout()
         # Details Panel
-        self.lbl_name = QLabel("Nom du Format")
+        self.lbl_name = QLabel("Format Name")
         self.lbl_name.setProperty("class", "h4")
         details_layout.addWidget(self.lbl_name)
         
@@ -63,18 +64,18 @@ class CFEditor(QWidget):
         details_layout.addWidget(self.desc_text, 1) # Stretch 1/3
 
         # Default Score Display
-        self.lbl_default_score = QLabel("(Score par défaut: 0)")
+        self.lbl_default_score = QLabel("(Default Score: 0)")
         self.lbl_default_score.setStyleSheet("color: #666; font-weight: bold; margin-top: 5px;")
         details_layout.addWidget(self.lbl_default_score)
 
         details_layout.addSpacing(10)
-        details_layout.addWidget(QLabel("Score par Profil:"))
+        details_layout.addWidget(QLabel("Score per Profile:"))
 
         # Table for Profile Assignments
         # Columns: [Profile Name, Enabled (Checkbox), Score (Spinbox)]
         self.profile_table = QTableWidget()
         self.profile_table.setColumnCount(3)
-        self.profile_table.setHorizontalHeaderLabels(["Profil", "Actif", "Score"])
+        self.profile_table.setHorizontalHeaderLabels(["Profile", "Active", "Score"])
         self.profile_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.profile_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.profile_table.setColumnWidth(1, 60) # Fixed width for Checkbox
@@ -100,7 +101,7 @@ class CFEditor(QWidget):
         for cf in sorted_cfs:
             item = QListWidgetItem(cf.get('name', 'Unknown'))
             item.setData(99, cf.get('trash_id')) 
-            item.setToolTip(cf.get('description', 'Pas de description'))
+            item.setToolTip(cf.get('description', 'No description'))
             self.list_widget.addItem(item)
             
     def filter_list(self, text):
@@ -124,7 +125,7 @@ class CFEditor(QWidget):
         # Default score logic
         trash_scores = cf_data.get('trash_scores', {})
         default_score = trash_scores.get('default', 0) if isinstance(trash_scores, dict) else 0
-        self.lbl_default_score.setText(f"(Score par défaut: {default_score})")
+        self.lbl_default_score.setText(f"(Default Score: {default_score})")
         
         current_assignment = self.active_assignments.get(trash_id)
         
@@ -170,26 +171,26 @@ class CFEditor(QWidget):
             spin.setEnabled(False) # Disabled by default until checked
             
             # Determine state from active assignment
+            is_active = False
+            template_assignment = self.template_assignments.get(trash_id)
+            local_assignment = self.active_assignments.get(trash_id)
             
+            # 1. Start with Inferred Score (General Guide Logic)
             inferred_score = self._infer_score(cf_data, p_name, default_score)
             final_val = inferred_score
-            is_active = False
+
+            # 2. Layer 1: Template (If present in Act 2 includes)
+            if template_assignment:
+                t_score_entry = next((x for x in template_assignment.profile_scores if x.get('name') == p_name), None)
+                if t_score_entry:
+                    final_val = t_score_entry.get('score', default_score)
             
-            if current_assignment:
-                # Check explicit assignment first
-                p_score_entry = next((x for x in current_assignment.profile_scores if x.get('name') == p_name), None)
-                if p_score_entry:
-                    final_val = p_score_entry.get('score', default_score)
+            # 3. Layer 2: Local Override (Active means "I want this CF in my local custom_formats section")
+            if local_assignment:
+                l_score_entry = next((x for x in local_assignment.profile_scores if x.get('name') == p_name), None)
+                if l_score_entry:
+                    final_val = l_score_entry.get('score', final_val)
                     is_active = True
-                # Fallback to legacy
-                elif not current_assignment.profile_scores and p_name in current_assignment.profiles:
-                    final_val = current_assignment.score
-                    is_active = True
-            
-            # If not explicitly active but inferred score is different from default
-            if not is_active and inferred_score != default_score:
-                 final_val = inferred_score
-                 is_active = True
 
             spin.setValue(final_val)
             chk.setChecked(is_active)
@@ -269,12 +270,70 @@ class CFEditor(QWidget):
         if current_item:
             self.load_details(current_item)
 
-    def load_assignments_from_template(self, cf_list: list[dict]):
+    def sync_assignments_from_templates(self, cf_list: list[dict]):
         """
-        Loads assignments from a template config list.
-        cf_list structure: [{"trash_ids": ["id1"], "assign_scores_to": [{"name": "P1", "score": 100}]}]
+        Syncs assignments based on Act 2 templates.
+        Populates 'template_assignments' which serves as a base layer.
         """
-        self.active_assignments.clear()
+        self.template_assignments.clear()
+        
+        # We use a temporary dictionary to build assignments
+        temp_assignments = {}
+        
+        for entry in cf_list:
+            trash_ids = entry.get("trash_ids") or []
+            names = entry.get("names")
+            if names:
+                if isinstance(names, str): names = [names]
+                for name in names:
+                    found = next((x for x in self.data if x.get('name') == name), None)
+                    if found: trash_ids.append(found.get('trash_id'))
+
+            for tid in trash_ids:
+                cf_data = next((x for x in self.data if x.get('trash_id') == tid), None)
+                if not cf_data: continue
+                
+                trash_scores = cf_data.get('trash_scores', {})
+                default_score = trash_scores.get('default', 0) if isinstance(trash_scores, dict) else 0
+
+                profile_scores = []
+                assignments = entry.get("assign_scores_to") or []
+                
+                for assign in assignments:
+                    a_name = assign.get("name")
+                    a_score = assign.get("score")
+                    if a_score is None:
+                        a_score = self._infer_score(cf_data, a_name, default_score)
+                    profile_scores.append({"name": a_name, "score": a_score})
+                
+                # Merge if tid already present (multi-template assignment)
+                if tid in temp_assignments:
+                    # Update profile_scores
+                    existing = temp_assignments[tid].profile_scores
+                    for ns in profile_scores:
+                        if not any(x['name'] == ns['name'] for x in existing):
+                            existing.append(ns)
+                else:
+                    temp_assignments[tid] = CustomFormatAssignment(
+                        trash_id=tid,
+                        name=cf_data.get('name'),
+                        description=cf_data.get('description', ''),
+                        score=0, 
+                        default_score=default_score,
+                        profiles=[], 
+                        profile_scores=profile_scores
+                    )
+        
+        self.template_assignments = temp_assignments
+        # Refresh UI if something is selected
+        current_item = self.list_widget.currentItem()
+        if current_item:
+            self.load_details(current_item)
+
+    def load_assignments_from_template(self, cf_list: list[dict], clear_existing: bool = True):
+        """Used for importing a full config (Acte 1). These become 'active'."""
+        if clear_existing:
+            self.active_assignments.clear()
         
         for entry in cf_list:
             trash_ids = entry.get("trash_ids")

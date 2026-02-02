@@ -23,11 +23,11 @@ class IncludeTreeWidget(QWidget):
         layout = QVBoxLayout(self)
         
         # Header
-        header_lbl = QLabel("Acte 2 : Le Casting")
+        header_lbl = QLabel("Act 2: The Casting")
         header_lbl.setProperty("class", "h2") 
         layout.addWidget(header_lbl)
         
-        desc_lbl = QLabel("Sélectionnez les modèles à inclure (templates).")
+        desc_lbl = QLabel("Select models to include (templates).")
         desc_lbl.setStyleSheet("color: #888; margin-bottom: 10px;")
         layout.addWidget(desc_lbl)
 
@@ -56,15 +56,15 @@ class IncludeTreeWidget(QWidget):
         
         templates = self.data_manager.get_templates_for_app(app_name)
         
-        root_defs = QTreeWidgetItem(self.tree, ["Définitions de Qualité"])
+        root_defs = QTreeWidgetItem(self.tree, ["Quality Definitions"])
         root_defs.setExpanded(True)
         root_defs.setFlags(root_defs.flags() & ~Qt.ItemIsUserCheckable)
         
-        root_profiles = QTreeWidgetItem(self.tree, ["Profils Préfabriqués"])
+        root_profiles = QTreeWidgetItem(self.tree, ["Prefab Profiles"])
         root_profiles.setExpanded(True)
         root_profiles.setFlags(root_profiles.flags() & ~Qt.ItemIsUserCheckable)
         
-        root_cfs = QTreeWidgetItem(self.tree, ["Packs de Formats (Custom Formats)"])
+        root_cfs = QTreeWidgetItem(self.tree, ["Format Packs (Custom Formats)"])
         root_cfs.setExpanded(True)
         root_cfs.setFlags(root_cfs.flags() & ~Qt.ItemIsUserCheckable)
         
@@ -129,6 +129,26 @@ class IncludeTreeWidget(QWidget):
             item = iterator.value()
             template_id = item.data(0, Qt.UserRole)
             if template_id:
+                selected.append(template_id)
+            iterator += 1
+        return selected
+
+    def get_selected_by_type(self, include_type: str) -> list[str]:
+        """Returns list of selected template IDs for a specific type."""
+        # Mapping: quality-definition, quality-profiles, custom-formats
+        category_map = {
+            "quality-definition": "quality-definition",
+            "quality-profiles": "quality-profile",
+            "custom-formats": "custom-format"
+        }
+        target_marker = category_map.get(include_type, include_type)
+        
+        selected = []
+        iterator = QTreeWidgetItemIterator(self.tree, QTreeWidgetItemIterator.Checked)
+        while iterator.value():
+            item = iterator.value()
+            template_id = item.data(0, Qt.UserRole)
+            if template_id and target_marker in template_id.lower():
                 selected.append(template_id)
             iterator += 1
         return selected

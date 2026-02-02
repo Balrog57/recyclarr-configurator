@@ -19,7 +19,7 @@ from core.worker import SyncWorker
 # UI Imports
 from ui.styles import CinemaTheme, GLOBAL_STYLESHEET
 from ui.widgets.include_tree import IncludeTreeWidget
-from ui.widgets.profile_builder import ProfileBuilder
+from ui.widgets.profile_builder import QualityProfileManager
 from ui.widgets.cf_editor import CFEditor
 from PySide6.QtWidgets import (QProgressDialog, QDialog, QRadioButton, QButtonGroup, 
                                QDialogButtonBox, QLineEdit, QMessageBox, QWidget,
@@ -39,7 +39,7 @@ class InstanceSettingsDialog(QDialog):
     """Dialog to edit Base URL and API Key."""
     def __init__(self, parent=None, base_url="", api_key=""):
         super().__init__(parent)
-        self.setWindowTitle("Paramètres de connexion")
+        self.setWindowTitle("Connection Settings")
         self.resize(400, 150)
         layout = QFormLayout(self)
         
@@ -66,11 +66,11 @@ class CustomTabBar(QTabBar):
         idx = self.tabAt(event.pos())
         if idx >= 0:
             menu = QMenu(self)
-            action_edit = QAction("Modifier URL & API Key", self)
+            action_edit = QAction("Edit URL & API Key", self)
             action_edit.triggered.connect(lambda: self.edit_tab_settings(idx))
             menu.addAction(action_edit)
             
-            action_rename = QAction("Renommer", self)
+            action_rename = QAction("Rename", self)
             action_rename.triggered.connect(lambda: self.rename_tab(idx))
             menu.addAction(action_rename)
             
@@ -89,7 +89,7 @@ class CustomTabBar(QTabBar):
         parent = self.parent()
         if isinstance(parent, QTabWidget):
             old_name = parent.tabText(index)
-            new_name, ok = QInputDialog.getText(self, "Renommer", "Nom de l'instance:", text=old_name)
+            new_name, ok = QInputDialog.getText(self, "Rename", "Instance Name:", text=old_name)
             if ok and new_name:
                 parent.setTabText(index, new_name)
                 # Update config name in widget
@@ -122,17 +122,17 @@ class InstanceEditor(QWidget):
         gen_layout = QFormLayout(self.tab_general)
         
         # Header Acte 1
-        header_gen = QLabel("Acte 1 : Le Scénario")
+        header_gen = QLabel("Act 1: The Script")
         header_gen.setProperty("class", "h2")
         gen_layout.addRow(header_gen)
         
-        desc_gen = QLabel("Configurez l'identité de l'instance et son modèle de base.")
+        desc_gen = QLabel("Configure the identity of the instance and its base model.")
         desc_gen.setStyleSheet("color: #888; margin-bottom: 10px;")
         gen_layout.addRow(desc_gen)
         gen_layout.addRow(QLabel(" ")) # Spacer
         
         # 1.1 Basic Info (Name is handled via Tab Title, URL/Key via right click)
-        self.lbl_info = QLabel("<i>(Cliquez droit sur l'onglet pour modifier URL & API Key)</i>")
+        self.lbl_info = QLabel("<i>(Right-click on the tab to edit URL & API Key)</i>")
         self.lbl_info.setStyleSheet("color: #888;")
         gen_layout.addRow(self.lbl_info)
         
@@ -148,31 +148,31 @@ class InstanceEditor(QWidget):
         
         # 1.3 Template / Mode
         self.combo_mode = QComboBox()
-        self.combo_mode.addItem("Custom (Manuel)")
+        self.combo_mode.addItem("Custom (Manual)")
         
         # Load templates from DataManager
         templates = self.data_manager.get_templates_for_app(self.app_type)
         for t in templates:
             self.combo_mode.addItem(t.get("name", "Unnamed"), t)
             
-        gen_layout.addRow("Modèle de Profil:", self.combo_mode)
+        gen_layout.addRow("Profile Model:", self.combo_mode)
         self.combo_mode.currentIndexChanged.connect(self.on_template_changed)
         
-        self.tabs.addTab(self.tab_general, "Acte 1 : Scénario")
+        self.tabs.addTab(self.tab_general, "Act 1: Script")
         
         # --- TAB 2: INCLUDES (Casting) ---
         self.act1_widget = IncludeTreeWidget(self.data_manager)
         self.act1_widget.load_for_app(self.app_type) 
-        self.tabs.addTab(self.act1_widget, "Acte 2 : Casting")
+        self.tabs.addTab(self.act1_widget, "Act 2: Casting")
         
         # --- TAB 3: QUALITY PROFILES (Mise en Scène) ---
-        self.act2_widget = ProfileBuilder()
-        self.tabs.addTab(self.act2_widget, "Acte 3 : Mise en Scène")
+        self.act2_widget = QualityProfileManager()
+        self.tabs.addTab(self.act2_widget, "Act 3: Staging")
         
         # --- TAB 4: CUSTOM FORMATS (Effets Spéciaux) ---
         cfs_data = self.data_manager.get_custom_formats_for_app(self.app_type)
         self.act3_widget = CFEditor(cfs_data, available_profiles=[]) 
-        self.tabs.addTab(self.act3_widget, "Acte 4 : Effets Spéciaux")
+        self.tabs.addTab(self.act3_widget, "Act 4: Special Effects")
         
         # Connect Tabs
         self.tabs.currentChanged.connect(self.on_tab_changed)
@@ -181,8 +181,14 @@ class InstanceEditor(QWidget):
 
     def on_template_changed(self, index):
         """Loads template data into other tabs."""
+        # Always clear active overrides when changing mode/template
+        self.act3_widget.active_assignments.clear()
+
         if index == 0:
-            return  # Custom/Manuel - Do nothing or clear?
+            # Custom/Manuel: Clear everything to start fresh
+            self.act1_widget.set_selected_includes([])
+            self.act3_widget.sync_assignments_from_templates([])
+            return
             
         template_data = self.combo_mode.itemData(index)
         if not template_data:
@@ -230,7 +236,8 @@ class InstanceEditor(QWidget):
                     else:
                         logger.warning(f"Ignored non-list custom_formats in root template: {type(root_cfs)}")
                 
-            self.act3_widget.load_assignments_from_template(resolved_cfs)
+            # Load as base layer (template assignments), not active overrides
+            self.act3_widget.sync_assignments_from_templates(resolved_cfs)
         except Exception as e:
             import traceback
             logger.error(f"Error loading template CFs: {e}")
@@ -242,17 +249,10 @@ class InstanceEditor(QWidget):
         qp_include_name = next((inc for inc in includes if "quality-profile" in inc), None)
         
         if qp_include_name:
-            # Fetch the definition from DataManager
-            profile_def = self.data_manager.get_include_data(self.app_type, qp_include_name)
-            if profile_def and "content" in profile_def:
-                try:
-                    self.act2_widget.load_profile_from_data(profile_def["content"])
-                    # Update available profiles in CF Editor immediately
-                    current_profile = self.act2_widget.get_profile()
-                    p_name = current_profile.name if current_profile else "Unknown"
-                    self.act3_widget.set_available_profiles([p_name])
-                except Exception as e:
-                    logger.error(f"Error loading profile builder: {e}")
+             # Just trigger sync logic which we moved to separate method, 
+             # but we can't easily call it without events. 
+             # For now, rely on Tab Change to sync.
+             pass
 
         
     def edit_connection_info(self):
@@ -262,51 +262,87 @@ class InstanceEditor(QWidget):
             url, key = dialog.get_values()
             self.config.base_url = url
             self.config.api_key = key
-            QMessageBox.information(self, "Instance mise à jour", f"Paramètres de {self.config.name} enregistrés.")
+            QMessageBox.information(self, "Instance Updated", f"Settings for {self.config.name} saved.")
 
     def update_config_name(self, text):
         self.config.name = text
         
     def on_tab_changed(self, index):
-        # Refresh CF Editor profiles when switching to Tab 4 (Index 3)
-        if index == 3: 
-            # 1. Get Custom Profile from Act 3
-            input_profile = self.act2_widget.get_profile()
-            profile_names = {input_profile.name} if input_profile and input_profile.name != "Custom Profile" else set()
-            
-            # 2. Get Selected Includes from Act 2 that are Quality Profiles
-            selected_includes = self.act1_widget.get_selected_templates()
-            for inc_name in selected_includes:
-                # Heuristic: Name contains "quality-profile"
-                if "quality-profile" in inc_name.lower():
-                    # Check if we can get the real profile name from data manager
-                    # Loop up include data
-                    inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
-                    if inc_data and "content" in inc_data:
-                        qp_list = inc_data["content"].get("quality_profiles", [])
-                        for qp in qp_list:
-                             if "name" in qp:
-                                 profile_names.add(qp["name"])
-                    else:
-                        # Fallback: try to guess from include name? Or just use include name?
-                        # Recyclarr usually defines the profile name in the content.
-                        pass
+        # Index 2 = Act 3 (Mise en Scène / Quality Profiles)
+        if index == 2:
+            self._sync_act3_profiles()
 
-            # Update Tab 4
-            self.act3_widget.set_available_profiles(sorted(list(profile_names)))
+        # Index 3 = Act 4 (Effets Spéciaux / Custom Formats)
+        elif index == 3: 
+            self._sync_act4_cfs()
+
+    def _sync_act3_profiles(self):
+        """Syncs Act 3 profiles from Act 2 selections."""
+        selected_includes = self.act1_widget.get_selected_templates()
+        new_profiles_data = []
+
+        for inc_name in selected_includes:
+            # Heuristic: Name contains "quality-profile"
+            if "quality-profile" in inc_name.lower():
+                # Loop up include data
+                inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
+                if inc_data and "content" in inc_data:
+                    qp_list = inc_data["content"].get("quality_profiles", [])
+                    new_profiles_data.extend(qp_list)
+
+        # Call sync on Act 2 widget (Profile Manager)
+        # It handles preserving custom profiles + refreshing includes
+        if new_profiles_data:
+            self.act2_widget.sync_profiles(new_profiles_data)
+        else:
+             self.act2_widget.sync_profiles([])
+
+    def _sync_act4_cfs(self):
+        """Syncs Act 4 CFs from Act 2 selections and Act 3 profiles."""
+        
+        # 1. Update Columns (Available Profiles from Act 3)
+        current_profiles = self.act2_widget.get_profiles()
+        profile_names = [p.name for p in current_profiles]
+        self.act3_widget.set_available_profiles(sorted(profile_names))
+        
+        # 2. Update Rows/Scores (From Act 2 CF Bundles)
+        selected_includes = self.act1_widget.get_selected_templates()
+        # We need to resolve all CFs from these includes
+        resolved_cfs = []
+        
+        for inc_name in selected_includes:
+            # Heuristic: Name contains "custom-formats"
+            if "custom-formats" in inc_name.lower():
+                inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
+                if inc_data:
+                    content = inc_data.get("content", {})
+                    # Try top level of content
+                    cfs = content.get("custom_formats", [])
+                    if cfs:
+                        resolved_cfs.extend(cfs)
+                    
+                    # Try nested (standard recyclarr config structure)
+                    app_c = content.get(self.app_type, {})
+                    if app_c:
+                         for k, v in app_c.items():
+                             if isinstance(v, dict) and "custom_formats" in v:
+                                 resolved_cfs.extend(v["custom_formats"])
+        
+        # Sync Act 4
+        self.act3_widget.sync_assignments_from_templates(resolved_cfs)
 
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""
         # 1. Config (URL/Key are stored in self.config via dialog)
         # Name is synced
         
-        # 2. Includes
-        self.config.includes_profiles = self.act1_widget.get_selected_templates()
+        # 2. Includes (categorized)
+        self.config.includes_quality_defs = self.act1_widget.get_selected_by_type("quality-definition")
+        self.config.includes_profiles = self.act1_widget.get_selected_by_type("quality-profiles")
+        self.config.includes_cfs = self.act1_widget.get_selected_by_type("custom-formats")
         
         # 3. Profiles
-        p = self.act2_widget.get_profile()
-        if p and p.items: 
-             self.config.custom_profiles = [p]
+        self.config.custom_profiles = self.act2_widget.get_profiles()
              
         # 4. CFs
         self.config.active_cfs = list(self.act3_widget.active_assignments.values())
@@ -328,12 +364,12 @@ class MainWindow(QMainWindow):
         else:
              # Direct Load
             if not self.data_manager.load_data():
-                QMessageBox.critical(self, "Erreur", "Impossible de charger les fichiers de données (json).")
+                QMessageBox.critical(self, "Error", "Unable to load data files (json).")
             self.setup_ui()
 
     def start_initial_sync(self):
         """Starts the background worker to update data."""
-        self.progress_dialog = QProgressDialog("Mise à jour des données (GitHub)...", "Annuler", 0, 0, self)
+        self.progress_dialog = QProgressDialog("Updating data (GitHub)...", "Cancel", 0, 0, self)
         self.progress_dialog.setWindowModality(Qt.WindowModal)
         self.progress_dialog.setMinimumDuration(0)
         
@@ -351,18 +387,18 @@ class MainWindow(QMainWindow):
     def on_sync_finished(self):
         self.progress_dialog.cancel()
         if not self.data_manager.load_data():
-             QMessageBox.critical(self, "Erreur", "Impossible de charger les données mises à jour.")
+             QMessageBox.critical(self, "Error", "Unable to load updated data.")
         else:
-             QMessageBox.information(self, "Succès", "Données mises à jour avec succès !")
+              QMessageBox.information(self, "Success", "Data updated successfully!")
         
         self.setup_ui()
         self.show()
 
     def on_sync_error(self, err):
         self.progress_dialog.cancel()
-        QMessageBox.warning(self, "Attention", f"Échec de la mise à jour : {err}\nChargement des données locales existantes.")
+        QMessageBox.warning(self, "Warning", f"Update failed: {err}\nLoading existing local data.")
         if not self.data_manager.load_data():
-            QMessageBox.critical(self, "Erreur", "Impossible de charger les données locales.")
+            QMessageBox.critical(self, "Error", "Unable to load local data.")
         self.setup_ui()
         self.show()
 
@@ -425,7 +461,7 @@ class MainWindow(QMainWindow):
         self.btn_prev_tab.setIcon(self.style().standardIcon(QStyle.SP_ArrowLeft))
         self.btn_prev_tab.setFixedSize(30, 30)
         self.btn_prev_tab.setIconSize(QSize(16, 16))
-        self.btn_prev_tab.setToolTip("Onglet précédent")
+        self.btn_prev_tab.setToolTip("Previous tab")
         self.btn_prev_tab.setStyleSheet(nav_btn_style)
         self.btn_prev_tab.clicked.connect(self.select_prev_tab)
         right_corner_layout.addWidget(self.btn_prev_tab)
@@ -435,7 +471,7 @@ class MainWindow(QMainWindow):
         self.btn_next_tab.setIcon(self.style().standardIcon(QStyle.SP_ArrowRight))
         self.btn_next_tab.setFixedSize(30, 30)
         self.btn_next_tab.setIconSize(QSize(16, 16))
-        self.btn_next_tab.setToolTip("Onglet suivant")
+        self.btn_next_tab.setToolTip("Next tab")
         self.btn_next_tab.setStyleSheet(nav_btn_style)
         self.btn_next_tab.clicked.connect(self.select_next_tab)
         right_corner_layout.addWidget(self.btn_next_tab)
@@ -446,7 +482,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(lbl_h_sep)
         
         # Add (Existing logic)
-        self.btn_add_tab = QPushButton("+ Ajouter")
+        self.btn_add_tab = QPushButton("+ Add")
         self.btn_add_tab.setFixedHeight(30)
         self.btn_add_tab.setStyleSheet("""
             QPushButton { background-color: #ff4500; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -456,7 +492,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(self.btn_add_tab)
         
         # Delete (Existing logic)
-        self.btn_del_tab = QPushButton("Supprimer")
+        self.btn_del_tab = QPushButton("Delete")
         self.btn_del_tab.setFixedHeight(30)
         self.btn_del_tab.setStyleSheet("""
             QPushButton { background-color: #ff4444; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -471,7 +507,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(lbl_sep)
 
         # Gen YAML (Existing)
-        self.btn_gen_yaml = QPushButton("Générer YAML")
+        self.btn_gen_yaml = QPushButton("Generate YAML")
         self.btn_gen_yaml.setFixedHeight(30)
         self.btn_gen_yaml.setStyleSheet("""
             QPushButton { background-color: #00e5ff; color: black; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -506,11 +542,11 @@ class MainWindow(QMainWindow):
         """Dialog to create a new instance."""
         # Simple dialog: Type (Radio), Name (Line)
         dialog = QDialog(self)
-        dialog.setWindowTitle("Nouvelle Instance")
+        dialog.setWindowTitle("New Instance")
         layout = QVBoxLayout(dialog)
         
         # Type Selection
-        layout.addWidget(QLabel("Type d'application :"))
+        layout.addWidget(QLabel("Application Type:"))
         type_group = QButtonGroup(dialog)
         
         rb_radarr = QRadioButton("Radarr")
@@ -523,8 +559,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(rb_sonarr)
         
         # Name
-        layout.addWidget(QLabel("Nom de l'instance :"))
-        name_edit = QLineEdit("Mon Instance")
+        layout.addWidget(QLabel("Instance Name:"))
+        name_edit = QLineEdit("My Instance")
         layout.addWidget(name_edit)
         
         # Buttons
@@ -553,7 +589,7 @@ class MainWindow(QMainWindow):
         icon = QIcon() # Placeholder or app specific icon
         self.tabs.addTab(editor, name)
         self.tabs.setCurrentWidget(editor)
-        self.status_bar.showMessage(f"Instance '{name}' ajoutée.", 3000)
+        self.status_bar.showMessage(f"Instance '{name}' added.", 3000)
 
     def remove_current_instance(self):
         idx = self.tabs.currentIndex()
@@ -562,10 +598,10 @@ class MainWindow(QMainWindow):
             
     def remove_instance_by_index(self, index):
         name = self.tabs.tabText(index)
-        confirm = QMessageBox.question(self, "Supprimer", f"Voulez-vous vraiment supprimer l'instance '{name}' ?", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "Delete", f"Do you really want to delete instance '{name}'?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             self.tabs.removeTab(index)
-            self.status_bar.showMessage(f"Instance '{name}' supprimée.", 3000)
+            self.status_bar.showMessage(f"Instance '{name}' deleted.", 3000)
 
     def generate_yaml(self):
         radarr_instances = []
@@ -589,9 +625,9 @@ class MainWindow(QMainWindow):
         generator = YAMLGenerator()
         try:
             path = generator.generate_config(full_config)
-            QMessageBox.information(self, "Succès", f"Fichier généré :\n{path}")
+            QMessageBox.information(self, "Success", f"File generated:\n{path}")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", str(e))
+            QMessageBox.critical(self, "Error", str(e))
 
 def main():
     app = QApplication(sys.argv)
