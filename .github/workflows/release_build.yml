@@ -1,4 +1,4 @@
-name: Build Installer
+name: Build Release
 
 on:
     release:
@@ -7,7 +7,7 @@ on:
 
 jobs:
     build:
-        name: Build Installer
+        name: Build Portable EXE
         runs-on: windows-latest
 
         steps:
@@ -25,37 +25,15 @@ jobs:
                   pip install -r requirements.txt
                   pip install pyinstaller
 
-            - name: Build Application (PyInstaller)
+            - name: Build Application (PyInstaller OneFile)
               run: |
                   pyinstaller recyclarr-config.spec --clean
-
-            - name: Install Inno Setup
-              run: |
-                  choco install innosetup
-
-            - name: Compile Installer (Inno Setup)
-              shell: powershell
-              run: |
-                  # Use tag name as version, default to 0.0.0 if not on tag
-                  $VERSION = "${{ github.ref_name }}"
-                  if ([string]::IsNullOrEmpty($VERSION)) { $VERSION = "0.0.0" }
-                  Write-Host "Building version: $VERSION"
-
-                  # Add Inno Setup to Path or call directly
-                  $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-
-                  if (Test-Path $ISCC) {
-                      & $ISCC "/DMyAppVersion=$VERSION" setup.iss
-                  } else {
-                      Write-Error "ISCC.exe not found at expected location."
-                      exit 1
-                  }
 
             - name: Upload Artifacts to Release
               uses: ncipollo/release-action@v1
               with:
                   allowUpdates: true
-                  artifacts: "Output/*.exe"
+                  artifacts: "dist/RecyclarrConfigurator.exe"
                   token: ${{ secrets.GITHUB_TOKEN }}
                   replacesArtifacts: true
                   tag: ${{ github.ref_name }}
