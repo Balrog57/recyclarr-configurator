@@ -52,5 +52,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/screenshot.png'
+    # icon='assets/screenshot.png' # Removed: screenshot is not an icon
 )
