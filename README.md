@@ -4,65 +4,66 @@
 [![PySide6](https://img.shields.io/badge/PySide6-6.4+-green.svg)](https://wiki.qt.io/Qt_for_Python)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**L'outil ultime pour configurer Recyclarr.**
-Application graphique moderne (PySide6) pour générer des fichiers de configuration YAML pour [Recyclarr](https://github.com/recyclarr/recyclarr), optimisée pour les cinéphiles exigeants.
+**The ultimate tool for configuring Recyclarr.**
+A modern graphical application (PySide6) to generate YAML configuration files for [Recyclarr](https://github.com/recyclarr/recyclarr), optimized for home server enthusiasts.
 
 ![Interface Screenshot](assets/screenshot.png)
 
 ---
 
-## 🌟 Nouveautés "Director's Cut"
+## 🌟 What's New in "Director's Cut"
 
-Cette version révisée apporte une refonte complète de l'expérience utilisateur, structurée en **4 Actes** pour une configuration intuitive :
-*   **Acte 1 - Le Scénario** : Paramètres de base et Templates.
-*   **Acte 2 - Le Casting** : Bibliothèques d'Includes (Custom Formats, Quality Defs).
-*   **Acte 3 - Mise en Scène** : Création de profils de qualité avancés (Glisser-Déposer, Groupes).
-*   **Acte 4 - Effets Spéciaux** : Éditeur de Custom Formats avec inférence intelligente des scores.
+This revised version brings a complete overhaul of the user experience, structured into **4 Acts** for intuitive configuration:
+*   **Act 1 - The Script**: Base settings and Template selection.
+*   **Act 2 - The Casting**: Include libraries (Custom Formats, Quality Defs).
+*   **Act 3 - Staging**: Advanced quality profile creation (Drag & Drop, Groups).
+*   **Act 4 - Special Effects**: Custom Format editor with smart score inference and comments.
 
-## ✨ Fonctionnalités
+## ✨ Features
 
-*   **🎨 Interface "Dark Cinema"** : Thème sombre immersif et responsive.
-*   **📱 Gestion Multi-Instances** : Onglets dynamiques pour gérer Radarr 4K, Radarr 1080p, Sonarr, etc.
-*   **🔄 Sync Auto** : Téléchargement automatique des dernières données TRaSH Guides au démarrage.
-*   **🧠 Smart Score Inference** : Assignation automatique intelligente des scores pour les formats personnalisés (détecte les alias comme "french" -> "fr" et coche automatiquement les cases pertinentes).
-*   **👁️ Visualisation Améliorée** : Checkbox à contraste élevé et colonnes ajustées pour une lisibilité parfaite.
-*   **📂 Template Deep Scan** : Chargement récursif complet de tous les templates et includes.
-*   **🖱️ Drag & Drop** : Groupement facile des qualités (ex: Bluray + WebDL).
-*   **⚡ Performance** : Navigation fluide et icônes vectorielles standardisées.
+*   **🎨 "Dark Cinema" Interface**: Immersive and responsive dark theme.
+*   **📱 Multi-Instance Management**: Dynamic tabs to manage Radarr 4K, Radarr 1080p, Sonarr, etc.
+*   **🔄 Auto Sync**: Automatically downloads the latest TRaSH Guides data at startup.
+*   **🧠 Smart Score Inference**: Intelligent score assignment for custom formats (detects aliases like "french" -> "fr").
+*   **💬 YAML Comments**: Automatically adds format names as comments in the generated YAML for better readability.
+*   **🛡️ Quality Protection**: Prevents accidental nesting of qualities in the profile builder (only groups allow nesting).
+*   **📂 Template Deep Scan**: Full recursive loading of all templates and includes.
+*   **🖱️ Drag & Drop**: Easy quality grouping (e.g., Bluray + WebDL).
+*   **⚡ Performance**: Smooth navigation and standardized vector icons.
 
-## 🚀 Démarrage Rapide
+## 🚀 Quick Start
 
 1.  **Installation**
     ```bash
     pip install -r requirements.txt
     ```
 
-2.  **Lancement**
+2.  **Launch**
     ```bash
     python main_gui_app.py
     ```
 
-👉 **Pour plus de détails, consultez la [DOCUMENTATION COMPLÈTE](DOCUMENTATION.md).**
+👉 **For more details, check the [FULL DOCUMENTATION](DOCUMENTATION.md).**
 
-## 📂 Structure du Projet
+## 📂 Project Structure
 
 ```
 recyclarr-config/
-├── core/                   # Cœur logique (DataManager, Models)
-├── ui/                     # (Optionnel) Composants UI
-├── main_gui_app.py         # Point d'entrée principal
-├── DOCUMENTATION.md        # Guide utilisateur détaillé
-├── requirements.txt        # Dépendances
+├── core/                   # Logic core (DataManager, Models, Generator)
+├── ui/                     # UI Components and styles
+├── main_gui_app.py         # Main entry point
+├── DOCUMENTATION.md        # Detailed user guide
+├── requirements.txt        # Dependencies
 └── ...
 ```
 
-## 🤝 Contribution
+## 🤝 Contributing
 
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une Issue ou une Pull Request.
+Contributions are welcome! Feel free to open an Issue or a Pull Request.
 
-## 📄 Licence
+## 📄 License
 
 MIT
 
 ---
-*Fait avec ❤️ pour la communauté Home Server.*
+*Made with ❤️ for the Home Server community.*
