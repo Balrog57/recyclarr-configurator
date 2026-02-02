@@ -10,12 +10,16 @@ class QualityProfileItem:
 @dataclass
 class QualityProfile:
     """Représente un profil complet (ex: FR-MULTi-VF-UHD)"""
-    name: str
+    name: str = "New Profile"
     upgrade_allowed: bool = False
     upgrade_until: str = ""
+    until_score: int = 10000
     min_format_score: int = 0
-    score_set: str = "french-multi-vf"
+    score_set: str = ""
+    quality_sort: str = "top"
+    reset_unmatched_scores: bool = True
     items: List[QualityProfileItem] = field(default_factory=list) # La structure arborescente
+    source: str = "custom" # "custom" or "include"
 
 @dataclass
 class CustomFormatAssignment:
@@ -35,6 +39,8 @@ class InstanceConfig:
     name: str              # ex: fr-films
     base_url: str
     api_key: str
+    delete_old_custom_formats: bool = True
+    replace_existing_custom_formats: bool = True
     # Les includes granulaires
     includes_quality_defs: List[str] = field(default_factory=list)
     includes_profiles: List[str] = field(default_factory=list)
