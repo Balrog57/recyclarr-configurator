@@ -87,6 +87,9 @@ class YAMLGenerator:
         if instance.custom_profiles:
             qp_list = []
             for qp in instance.custom_profiles:
+                if not qp.active:
+                    continue
+                    
                 qp_dict = {
                     "name": qp.name,
                     "reset_unmatched_scores": {
@@ -113,36 +116,13 @@ class YAMLGenerator:
                         })
                     else:
                         # It's a single quality
-                        qualities_structure.append(item.name) # Just the string name if it's a leaf quality?
-                        # Recyclarr spec: - name: "Quality" OR just "Quality"? 
-                        # Usually inside 'qualities' list of a profile, it is a list of objects or strings.
-                        # If simple quality: just string. 
-                        # If group: object with name and qualities.
-                        # User example:
-                        # qualities:
-                        #   - name: Bluray...
-                        #     qualities: ...
-                        #   - name: Bluray...
-                        #     qualities: ...
-                        # All are groups in the user example.
-                        # But basic qualities should be just strings or {name: Q}.
-                        # Let's use {name: Q} to be safe or string. 
-                        # Looking at Recyclarr docs, simple strings are allowed.
-                        # Let's check my previous code: `qualities_structure.append({"name": item.name})`
-                        # This works `name: 720p`.
-                        pass
+                        qualities_structure.append(item.name)
                         
-                # Actually, correction: if it is a single item at root, it is usually just a quality name or {name: X}
-                # But if we want to support groups, we use the dict structure.
-                # My previous code did: qualities_structure.append({"name": item.name}) for single items.
-                # If the user example has ONLY groups, then my profile builder should force groups?
-                # The user said "create groups".
-                # I'll stick to the previous dict logic for single items, it's valid.
-
                 qp_dict["qualities"] = qualities_structure
                 qp_list.append(qp_dict)
             
-            config["quality_profiles"] = qp_list
+            if qp_list:
+                config["quality_profiles"] = qp_list
             
         # 4. Custom Formats (AFTER quality_profiles)
         if instance.active_cfs:

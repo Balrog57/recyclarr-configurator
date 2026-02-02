@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QTreeWidget, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QTreeWidget, 
                                QTreeWidgetItem, QLabel, QPushButton, QSplitter, QInputDialog,
                                QMessageBox, QAbstractItemView, QMenu, QDialog, QFormLayout,
                                QLineEdit, QCheckBox, QComboBox, QSpinBox, QDialogButtonBox, QGroupBox)
@@ -59,6 +59,10 @@ class QualityProfileTree(QTreeWidget):
     quality_removed = Signal(str)
     structure_changed = Signal() # To update combo boxes
 
+    def _is_group(self, item):
+        if not item: return False
+        return bool(item.flags() & Qt.ItemIsDropEnabled) or item.childCount() > 0
+
     def __init__(self):
         super().__init__()
         self.setHeaderHidden(True)
@@ -108,7 +112,7 @@ class QualityProfileTree(QTreeWidget):
                 new_item.setFlags(new_item.flags() & ~Qt.ItemIsDropEnabled) # Individual qualities can't have children
                 
                 if target_item:
-                    is_target_group = is_group(target_item)
+                    is_target_group = self._is_group(target_item)
                     if drop_indicator == QAbstractItemView.OnItem and is_target_group:
                         target_item.addChild(new_item)
                         target_item.setExpanded(True)
@@ -122,7 +126,6 @@ class QualityProfileTree(QTreeWidget):
                         if drop_indicator == QAbstractItemView.BelowItem:
                             idx += 1
                         elif drop_indicator == QAbstractItemView.OnItem:
-                            # If they drop "on" a non-group quality, we assume they want it after (like a list)
                             idx += 1
                         
                         target_parent.insertChild(idx, new_item)
@@ -134,37 +137,45 @@ class QualityProfileTree(QTreeWidget):
             self.structure_changed.emit()
 
         elif source == self:
-            # Internal move
-            if target_item and drop_indicator == QAbstractItemView.OnItem and not is_group(target_item):
-                # Prevent dropping ON a quality (no nesting allowed if target is not a group)
-                # Instead, treat it as dropping below
-                event.setDropAction(Qt.MoveAction)
-                # We let the default handle Above/Below, but we must block "On" for non-groups
-                # A safer way is to manually handle it or signal that OnItem is only valid for groups
-                pass 
-            
+            # MOVE INTERNE : On utilise la logique native qui est plus stable.
+            # Nos filtres dans dragMoveEvent garantissent qu'aucune imbrication illégale ne se produit.
             super().dropEvent(event)
-            # Post-drop cleanup: if something ended up nested in a non-group, fix it?
-            # Or better, prevent it via dragMoveEvent
             self.structure_changed.emit()
 
     def dragMoveEvent(self, event):
-        """Prevent drop indicator 'OnItem' for non-group items."""
-        target_item = self.itemAt(event.position().toPoint())
-        
-        def is_group(item):
-            if not item: return False
-            return (item.childCount() > 0 or "|" in item.text(0) or item.text(0).startswith("Groupe"))
-
-        if target_item and not is_group(target_item):
-            # If the cursor is right on the item, don't allow 'On' action
-            # Standard QTreeWidget will switch to Above/Below if we are at edge
-            if self.dropIndicatorPosition() == QAbstractItemView.OnItem:
-                # We can't easily force it to Above/Below from here without changing position,
-                # but we can ignore the OnItem action.
-                # However, the user wants to be able to move above/below.
-                pass
+        """Bloque les mouvements interdits tout en permettant le tri."""
+        # On laisse d'abord super() calculer les positions et l'indicateur visuel
         super().dragMoveEvent(event)
+        
+        pos = event.position().toPoint()
+        target_item = self.itemAt(pos)
+        drop_indicator = self.dropIndicatorPosition()
+        source = event.source()
+        
+        # Détecter si on déplace un groupe (interne)
+        is_dragging_group = False
+        if source == self:
+            is_dragging_group = any(self._is_group(i) for i in self.selectedItems())
+
+        if is_dragging_group:
+            # 1. Un groupe ne peut JAMAIS être lâché "SUR" un autre élément (cela créerait une imbrication)
+            if drop_indicator == QAbstractItemView.OnItem:
+                event.ignore()
+                return
+            # 2. Un groupe ne peut JAMAIS être lâché à l'intérieur d'un autre groupe (cible avec parent)
+            if target_item and target_item.parent():
+                event.ignore()
+                return
+        else:
+            # Déplacement de qualités (interne ou gauche)
+            if target_item and drop_indicator == QAbstractItemView.OnItem:
+                # Une qualité ne peut aller "SUR" qu'un groupe
+                if not self._is_group(target_item):
+                    event.ignore()
+                    return
+        
+        # Si on arrive ici, l'action est valide
+        event.accept()
             
     def show_context_menu(self, position):
         item = self.itemAt(position)
@@ -462,6 +473,49 @@ class ProfileEditorDialog(QDialog):
     def get_profile(self) -> QualityProfile:
         return self.profile
 
+class ProfileItemWidget(QWidget):
+    """Custom widget for QListWidget items in QualityProfileManager."""
+    def __init__(self, profile: QualityProfile, parent=None):
+        super().__init__(parent)
+        self.profile = profile
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 8, 15, 8)
+        
+        # Name and info
+        self.label = QLabel(f"{profile.name}")
+        self.label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        
+        self.info_label = QLabel(f"({len(profile.items)} groups/qualities)")
+        self.info_label.setStyleSheet("color: #888; font-size: 11px; margin-left: 5px;")
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.info_label)
+        layout.addStretch()
+        
+        # Activation Checkbox
+        self.checkbox = QCheckBox("Active")
+        self.checkbox.setChecked(profile.active)
+        # Style to match CF editor checkboxes
+        self.checkbox.setStyleSheet("""
+            QCheckBox { color: #aaa; }
+            QCheckBox::indicator { 
+                width: 18px; 
+                height: 18px; 
+                background-color: white; 
+                border: 1px solid #666; 
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:checked { 
+                background-color: #d35400; 
+                border: 1px solid #d35400;
+            }
+        """)
+        self.checkbox.stateChanged.connect(self.on_state_changed)
+        layout.addWidget(self.checkbox)
+
+    def on_state_changed(self, state):
+        self.profile.active = (state == 2) # Qt.Checked is 2
+
 class QualityProfileManager(QWidget):
     """Act 3: Management of Multiple Quality Profiles."""
     def __init__(self):
@@ -507,7 +561,12 @@ class QualityProfileManager(QWidget):
     def refresh_list(self):
         self.list_widget.clear()
         for p in self.profiles:
-            self.list_widget.addItem(f"{p.name} (Items: {len(p.items)})")
+            item = QListWidgetItem(self.list_widget)
+            item.setSizeHint(QSize(0, 50)) # Height for the custom widget
+            self.list_widget.addItem(item)
+            
+            widget = ProfileItemWidget(p, self)
+            self.list_widget.setItemWidget(item, widget)
             
     def add_profile(self):
         dialog = ProfileEditorDialog(self)
@@ -582,6 +641,7 @@ class QualityProfileManager(QWidget):
             profile.min_format_score = p_data.get("min_format_score", 0)
             profile.score_set = p_data.get("score_set", "")
             profile.quality_sort = p_data.get("quality_sort", "top")
+            profile.active = p_data.get("active", False)
             
             # Load Qualities Structure
             qualities = p_data.get("qualities", [])
