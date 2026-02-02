@@ -68,6 +68,7 @@ The advanced editor for Custom Formats.
 *   **Navigation**: Use the `◀` and `▶` arrows to switch between instances.
 *   **+ Add**: Create a new instance (Radarr or Sonarr).
 *   **Delete**: Remove the current instance (tab).
+*   **Load YAML**: Import an existing `config.yml` (or `.yaml`) to edit your current instances.
 *   **Generate YAML**: The final goal! Click to generate the complete `recyclarr.yml` file.
 
 ---

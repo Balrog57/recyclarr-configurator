@@ -331,6 +331,32 @@ class InstanceEditor(QWidget):
         # Sync Act 4
         self.act3_widget.sync_assignments_from_templates(resolved_cfs)
 
+    def load_config(self, data: dict):
+        """Populates the editor from a dictionary (YAML data)."""
+        # 1. Config Basics
+        self.config.base_url = data.get("base_url", "")
+        self.config.api_key = data.get("api_key", "")
+        self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", True)
+        self.config.replace_existing_custom_formats = data.get("replace_existing_custom_formats", True)
+        
+        # 2. Includes
+        # YAML: include: [ { template: "..." }, ... ]
+        includes_data = data.get("include", [])
+        include_ids = []
+        for inc in includes_data:
+            if isinstance(inc, dict) and "template" in inc:
+                include_ids.append(inc["template"])
+        
+        self.act1_widget.set_selected_includes(include_ids)
+        
+        # 3. Quality Profiles
+        qp_data = data.get("quality_profiles", [])
+        self.act2_widget.load_profiles(qp_data)
+        
+        # 4. Custom Formats
+        cf_data = data.get("custom_formats", [])
+        self.act3_widget.load_assignments_from_template(cf_data, clear_existing=True)
+
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""
         # 1. Config (URL/Key are stored in self.config via dialog)
@@ -502,6 +528,21 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(self.btn_del_tab)
         
         # Separator
+        lbl_sep_2 = QLabel("|")
+        lbl_sep_2.setStyleSheet("color: #555; font-weight: bold;")
+        right_corner_layout.addWidget(lbl_sep_2)
+
+        # Load YAML
+        self.btn_load_yaml = QPushButton("Load YAML")
+        self.btn_load_yaml.setFixedHeight(30)
+        self.btn_load_yaml.setStyleSheet("""
+            QPushButton { background-color: #6200ea; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
+            QPushButton:hover { background-color: #7c43bd; }
+        """)
+        self.btn_load_yaml.clicked.connect(self.load_yaml_config)
+        right_corner_layout.addWidget(self.btn_load_yaml)
+        
+        # Separator
         lbl_sep = QLabel("|")
         lbl_sep.setStyleSheet("color: #555; font-weight: bold;")
         right_corner_layout.addWidget(lbl_sep)
@@ -628,6 +669,53 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Success", f"File generated:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
+
+    def load_yaml_config(self):
+        """Loads a config.yml file and repopulates the tabs."""
+        path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "YAML Files (*.yml *.yaml)")
+        if not path:
+            return
+            
+        generator = YAMLGenerator()
+        try:
+            data = generator.load_yaml(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")
+            return
+            
+        # Confirm overwrite
+        if self.tabs.count() > 0:
+            resp = QMessageBox.question(self, "Overwrite?", 
+                                        "Loading a file will close current tabs. Continue?",
+                                        QMessageBox.Yes | QMessageBox.No)
+            if resp != QMessageBox.Yes:
+                return
+        
+        # Clear tabs
+        while self.tabs.count() > 0:
+            self.tabs.removeTab(0)
+            
+        # Process Radarr
+        radarr_data = data.get("radarr", {})
+        # Warning: radarr_data might be a dict (instances) or list? Recyclarr usually uses dict for named instances.
+        if isinstance(radarr_data, dict):
+            for name, config_data in radarr_data.items():
+                self.add_instance("radarr", name)
+                # Get the newly created editor
+                editor = self.tabs.widget(self.tabs.count() - 1)
+                if isinstance(editor, InstanceEditor):
+                    editor.load_config(config_data)
+                
+        # Process Sonarr
+        sonarr_data = data.get("sonarr", {})
+        if isinstance(sonarr_data, dict):
+            for name, config_data in sonarr_data.items():
+                self.add_instance("sonarr", name)
+                editor = self.tabs.widget(self.tabs.count() - 1)
+                if isinstance(editor, InstanceEditor):
+                    editor.load_config(config_data)
+                
+        QMessageBox.information(self, "Success", "Configuration loaded!")
 
 def main():
     app = QApplication(sys.argv)
