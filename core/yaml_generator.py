@@ -75,7 +75,7 @@ class YAMLGenerator:
         # 1. Base Instance Config
         config = {
             "base_url": instance.base_url if instance.base_url else "http://localhost:7878",
-            "api_key": instance.api_key if instance.api_key else "YOUR_API_KEY",
+            "api_key": instance.api_key if instance.api_key else "<YOUR_API_KEY>",
             "delete_old_custom_formats": instance.delete_old_custom_formats,
             "replace_existing_custom_formats": instance.replace_existing_custom_formats
         }
