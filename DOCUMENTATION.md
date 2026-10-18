@@ -41,6 +41,9 @@ This is where you define the foundation of your instance.
 *   **Connection**: Right-click on the tab to enter your server's URL and API Key.
 *   **Quality Definition Type**: Choose between `movie` / `anime` (for Radarr) or `series` / `anime` (for Sonarr).
 *   **Templates**: Select a base model (e.g., `french-vostfr-hd-bluray-web`, `hd-bluray-web`) or work in manual Custom mode.
+*   **⚡ Assistant rapide**: Pick content (films/séries or animés), quality, the language order (e.g. MULTi > VF > VOSTFR, or MULTi > VOSTFR for anime) and accepted codecs (x265, AV1). It loads the matching TRaSH French profile (or the TRaSH French anime recipe) and sets the language/codec scores in Act 4. Unchecked languages are rejected (-10000).
+    *   How it works: Radarr/Sonarr do not parse `VOSTFR` as French, so a VOSTFR release counts as original audio; the `VOSTFR` custom format lifts it back above plain VO.
+    *   Prerequisite (TRaSH): set the indexers' *Multi Languages* option to `Original` + `French`.
 
 ### 👯 Act 2: The Casting (TRaSH Guides & Includes)
 Select the ingredients for your configuration directly from TRaSH Guides:

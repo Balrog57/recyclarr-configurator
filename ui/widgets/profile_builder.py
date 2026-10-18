@@ -7,22 +7,33 @@ from PySide6.QtGui import QDrag, QIcon, QAction
 
 from core.models import QualityProfile, QualityProfileItem
 
+# Official quality names (Radarr/Sonarr src/NzbDrone.Core/Qualities/Quality.cs), best first
+QUALITIES = {
+    "radarr": [
+        "Remux-2160p", "Bluray-2160p", "WEBDL-2160p", "WEBRip-2160p", "HDTV-2160p",
+        "Remux-1080p", "Bluray-1080p", "WEBDL-1080p", "WEBRip-1080p", "HDTV-1080p",
+        "Bluray-720p", "WEBDL-720p", "WEBRip-720p", "HDTV-720p",
+        "Bluray-576p", "Bluray-480p", "WEBDL-480p", "WEBRip-480p", "DVD-R", "DVD", "SDTV",
+        "BR-DISK", "Raw-HD", "REGIONAL", "DVDSCR", "TELECINE", "TELESYNC", "CAM", "WORKPRINT", "Unknown",
+    ],
+    "sonarr": [
+        "Bluray-2160p Remux", "Bluray-2160p", "WEBDL-2160p", "WEBRip-2160p", "HDTV-2160p",
+        "Bluray-1080p Remux", "Bluray-1080p", "WEBDL-1080p", "WEBRip-1080p", "HDTV-1080p", "Raw-HD",
+        "Bluray-720p", "WEBDL-720p", "WEBRip-720p", "HDTV-720p",
+        "Bluray-576p", "Bluray-480p", "WEBDL-480p", "WEBRip-480p", "HDTV-480p", "DVD", "SDTV", "Unknown",
+    ],
+}
+
 class QualitySourceList(QListWidget):
     """List of available qualities to drag from."""
-    def __init__(self):
+    def __init__(self, app_type: str = "radarr"):
         super().__init__()
         self.setDragEnabled(True)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setDefaultDropAction(Qt.MoveAction)
         
-        # Standard qualities
-        self.qualities = [
-            "Bluray-2160p", "Remux-2160p", "WEB-2160p", "WEBDL-2160p",
-            "Bluray-1080p", "Remux-1080p", "WEB-1080p", "WEBDL-1080p",
-            "HDTV-1080p", "Bluray-720p", "WEB-720p", "HDTV-720p",
-            "DVD", "SDTV", "CAM", "TS"
-        ]
+        self.qualities = list(QUALITIES[app_type])
         self.addItems(self.qualities)
 
     def hide_quality(self, quality_name: str):
@@ -317,8 +328,9 @@ class QualityProfileTree(QTreeWidget):
 
 class ProfileEditorDialog(QDialog):
     """Dialog to edit a single Quality Profile."""
-    def __init__(self, parent=None, profile: QualityProfile = None):
+    def __init__(self, parent=None, profile: QualityProfile = None, app_type: str = "radarr"):
         super().__init__(parent)
+        self.app_type = app_type
         self.setWindowTitle("Edit Quality Profile")
         self.resize(1000, 700)
         self.profile = profile or QualityProfile(name="New Profile")
@@ -383,7 +395,7 @@ class ProfileEditorDialog(QDialog):
         left_widget = QWidget()
         l_layout = QVBoxLayout(left_widget)
         l_layout.addWidget(QLabel("Available Qualities"))
-        self.source_list = QualitySourceList()
+        self.source_list = QualitySourceList(self.app_type)
         l_layout.addWidget(self.source_list)
         
         # Right: Tree
@@ -518,8 +530,9 @@ class ProfileItemWidget(QWidget):
 
 class QualityProfileManager(QWidget):
     """Act 3: Management of Multiple Quality Profiles."""
-    def __init__(self):
+    def __init__(self, app_type: str = "radarr"):
         super().__init__()
+        self.app_type = app_type
         self.profiles: list[QualityProfile] = []
         self.setup_ui()
         
@@ -569,7 +582,7 @@ class QualityProfileManager(QWidget):
             self.list_widget.setItemWidget(item, widget)
             
     def add_profile(self):
-        dialog = ProfileEditorDialog(self)
+        dialog = ProfileEditorDialog(self, app_type=self.app_type)
         if dialog.exec() == QDialog.Accepted:
             new_profile = dialog.get_profile()
             self.profiles.append(new_profile)
@@ -580,7 +593,7 @@ class QualityProfileManager(QWidget):
         if row < 0: return
         
         profile_to_edit = self.profiles[row]
-        dialog = ProfileEditorDialog(self, profile=profile_to_edit)
+        dialog = ProfileEditorDialog(self, profile=profile_to_edit, app_type=self.app_type)
         if dialog.exec() == QDialog.Accepted:
             # Update was done in place on the object, but we refresh list text
             self.refresh_list()

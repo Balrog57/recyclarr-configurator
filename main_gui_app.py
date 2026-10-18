@@ -21,6 +21,8 @@ from ui.styles import CinemaTheme, GLOBAL_STYLESHEET
 from ui.widgets.include_tree import IncludeTreeWidget
 from ui.widgets.profile_builder import QualityProfileManager
 from ui.widgets.cf_editor import CFEditor
+from ui.widgets.quick_profile_dialog import QuickProfileDialog
+from core.quick_profile import build_quick_profile
 from PySide6.QtWidgets import (QProgressDialog, QDialog, QRadioButton, QButtonGroup, 
                                QDialogButtonBox, QLineEdit, QMessageBox, QWidget,
                                QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
@@ -157,6 +159,11 @@ class InstanceEditor(QWidget):
             
         gen_layout.addRow("Profile Model:", self.combo_mode)
         self.combo_mode.currentIndexChanged.connect(self.on_template_changed)
+
+        # 1.4 Quick wizard: language order / codecs on top of TRaSH profiles
+        self.btn_quick = QPushButton("⚡ Assistant rapide (langues, qualité, codecs)…")
+        self.btn_quick.clicked.connect(self.open_quick_wizard)
+        gen_layout.addRow(self.btn_quick)
         
         self.tabs.addTab(self.tab_general, "Act 1: Script")
         
@@ -166,7 +173,7 @@ class InstanceEditor(QWidget):
         self.tabs.addTab(self.act1_widget, "Act 2: Casting")
         
         # --- TAB 3: QUALITY PROFILES (Mise en Scène) ---
-        self.act2_widget = QualityProfileManager()
+        self.act2_widget = QualityProfileManager(self.app_type)
         self.tabs.addTab(self.act2_widget, "Act 3: Staging")
         
         # --- TAB 4: CUSTOM FORMATS (Effets Spéciaux) ---
@@ -242,6 +249,31 @@ class InstanceEditor(QWidget):
         except Exception as e:
             logger.exception("Error loading template CFs")
             
+    def open_quick_wizard(self):
+        dialog = QuickProfileDialog(self.app_type, self)
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                self.apply_quick_profile(**dialog.get_values())
+            except ValueError as e:
+                QMessageBox.warning(self, "Assistant rapide", str(e))
+
+    def apply_quick_profile(self, anime, tier, ranking, accept_x265=False, accept_av1=False):
+        """Replaces the instance setup with a TRaSH profile tuned to the given preferences."""
+        plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, ranking, accept_x265, accept_av1)
+        # Custom (Manual) mode, cleared even if it was already selected
+        self.combo_mode.blockSignals(True)
+        self.combo_mode.setCurrentIndex(0)
+        self.combo_mode.blockSignals(False)
+        self.on_template_changed(0)
+        self.combo_qdef.setCurrentText(plan["qdef"])
+
+        profile = {**self.data_manager.get_quality_profile_by_id(plan["profile_trash_id"]), "active": True}
+        if plan["score_set"]:
+            profile["score_set"] = plan["score_set"]
+        self.act2_widget.load_profiles([profile])
+        self.act1_widget.set_selected_includes([plan["profile_trash_id"], *plan["cf_groups"]])
+        self.act3_widget.load_assignments_from_template(plan["custom_formats"], clear_existing=True)
+
     @staticmethod
     def _cf_group_ids(instance_data: dict) -> list:
         """trash_ids listed under custom_format_groups.add (template or YAML)."""
