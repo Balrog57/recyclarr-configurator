@@ -50,12 +50,14 @@ def test_data_manager_resolves_v8_template(data_manager):
     template = data_manager.get_template_by_name("radarr", "french-multi-vf-hd-bluray-web")
     assert template is not None, "Template french-multi-vf-hd-bluray-web not found"
 
-    resolved_cfs = data_manager.resolve_template_includes("radarr", template)
-    assert len(resolved_cfs) > 0, "Expected resolved custom formats for template"
-
-    # Verify at least one CF has assign_scores_to
-    has_assignment = any(len(entry.get("assign_scores_to", [])) > 0 for entry in resolved_cfs)
-    assert has_assignment, "Resolved CFs should have assign_scores_to populated"
+    from core.resolver import resolve
+    instance = list(template["content"]["radarr"].values())[0]
+    (name, profile), = resolve(instance, "radarr", data_manager).items()
+    assert name == "[French MULTi.VF] HD Bluray + WEB"
+    assert profile["score_set"] == "french-multi-vf"
+    names = {(data_manager.get_cf_by_id(t) or {}).get("name"): s for t, s in profile["cfs"].items()}
+    # Guide scores of the French language CFs, straight from TRaSH data
+    assert names["Language: Original + French"] > 0 and names["Language: Not French"] < 0
 
 
 def test_yaml_generator_v8_syntax(tmp_path):
@@ -186,7 +188,6 @@ def test_ui_widgets_instantiation(data_manager):
     tree_widget = IncludeTreeWidget(data_manager)
     tree_widget.load_for_app("radarr")
     assert tree_widget.root_profiles.childCount() > 0
-    assert tree_widget.root_defs.childCount() > 0
     assert tree_widget.root_cfs.childCount() > 0
 
     # 2. QualityProfileManager
@@ -264,11 +265,12 @@ def test_instance_editor_selection_and_generation(data_manager, tmp_path):
     # Reload into a fresh InstanceEditor
     loaded_data = generator.load_yaml(out_path)
 
-    # Template's custom_format_groups are carried over like the official template
+    # Same effective profile as the official template (its groups are auto-synced defaults)
+    from core.resolver import resolve
     template = data_manager.get_template_by_name("radarr", "french-multi-vf-hd-bluray-web")
-    template_groups = list(template["content"]["radarr"].values())[0]["custom_format_groups"]["add"]
-    out_groups = loaded_data["radarr"]["radarr_test"]["custom_format_groups"]["add"]
-    assert [g["trash_id"] for g in out_groups] == [g["trash_id"] for g in template_groups]
+    (_, ref), = resolve(list(template["content"]["radarr"].values())[0], "radarr", data_manager).items()
+    (_, got), = resolve(loaded_data["radarr"]["radarr_test"], "radarr", data_manager).items()
+    assert got["cfs"] == ref["cfs"] and got["leaves"] == ref["leaves"]
     editor2 = InstanceEditor(data_manager, app_type="radarr")
     editor2.load_config(loaded_data["radarr"]["radarr_test"])
 

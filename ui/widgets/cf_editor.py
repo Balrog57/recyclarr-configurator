@@ -26,7 +26,8 @@ class CFEditor(QWidget):
         header_lbl.setProperty("class", "h2")
         layout.addWidget(header_lbl)
         
-        desc_lbl = QLabel("Assign scores to custom formats.")
+        desc_lbl = QLabel("Bold = synced by TRaSH Guides in your profiles (guide score shown). Check a profile to override its score.")
+        desc_lbl.setWordWrap(True)
         desc_lbl.setStyleSheet("color: #888; margin-bottom: 10px;")
         layout.addWidget(desc_lbl)
         
@@ -167,7 +168,7 @@ class CFEditor(QWidget):
             
             # 3. Score Spinbox
             spin = QSpinBox()
-            spin.setRange(-10000, 10000)
+            spin.setRange(-100000, 100000)  # TRaSH uses up to ±35000
             spin.setEnabled(False) # Disabled by default until checked
             
             # Determine state from active assignment
@@ -325,6 +326,12 @@ class CFEditor(QWidget):
                     )
         
         self.template_assignments = temp_assignments
+        # Bold = synced by the guide in the current profiles
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            font = item.font()
+            font.setBold(item.data(99) in temp_assignments)
+            item.setFont(font)
         # Refresh UI if something is selected
         current_item = self.list_widget.currentItem()
         if current_item:

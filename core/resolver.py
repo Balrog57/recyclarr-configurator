@@ -1,5 +1,5 @@
 """
-Offline simulation of how Recyclarr resolves an instance config into the quality profiles
+Offline resolution of how Recyclarr resolves an instance config into the quality profiles
 Radarr/Sonarr end up with (qualities, cutoff, scores). Follows recyclarr.dev semantics:
 - guide-backed profile (trash_id): TRaSH profile JSON + YAML overrides, CF scores from its score_set
 - CF groups: default groups auto-sync to profiles in their `include` list; `add` groups target
@@ -22,7 +22,7 @@ def _leaves(qualities: list) -> list:
     return out
 
 
-def _group_cfs(group: dict, select=None, exclude=None, select_all=False) -> list:
+def group_cfs(group: dict, select=None, exclude=None, select_all=False) -> list:
     exclude = set(exclude or [])
     chosen = []
     for cf in group["content"]["custom_formats"]:
@@ -33,11 +33,17 @@ def _group_cfs(group: dict, select=None, exclude=None, select_all=False) -> list
     return chosen
 
 
-def _group_includes(group: dict, profile_trash_id: str) -> bool:
+def group_includes(group: dict, profile_trash_id: str) -> bool:
     qp = group["content"].get("quality_profiles") or {}
     if "include" in qp:
         return profile_trash_id in qp["include"].values()
     return profile_trash_id not in (qp.get("exclude") or {}).values()
+
+
+def auto_groups(dm, app: str, profile_trash_ids) -> list:
+    """trash_ids of the default CF groups Recyclarr auto-syncs for these guide-backed profiles."""
+    return [g["trash_id"] for g in dm.get_includes_by_type(app, "custom-formats")
+            if g.get("default") and any(group_includes(g, t) for t in profile_trash_ids)]
 
 
 def resolve(instance: dict, app: str, dm, includes: list = None) -> dict:
@@ -89,16 +95,16 @@ def resolve(instance: dict, app: str, dm, includes: list = None) -> dict:
             add(name, tid)
         if name in trash_of:
             for g in all_groups:
-                if g.get("default") and g["trash_id"] not in skip and _group_includes(g, trash_of[name]):
-                    for tid in _group_cfs(g):
+                if g.get("default") and g["trash_id"] not in skip and group_includes(g, trash_of[name]):
+                    for tid in group_cfs(g):
                         add(name, tid)
 
     for entry in groups_cfg.get("add") or []:
         g = dm.get_include_data(app, entry["trash_id"])
         targets = _targets(entry.get("assign_scores_to"), profiles, trash_of) if entry.get("assign_scores_to") \
-            else [n for n in trash_of if _group_includes(g, trash_of[n])]
+            else [n for n in trash_of if group_includes(g, trash_of[n])]
         for name in targets:
-            for tid in _group_cfs(g, entry.get("select"), entry.get("exclude"), entry.get("select_all")):
+            for tid in group_cfs(g, entry.get("select"), entry.get("exclude"), entry.get("select_all")):
                 add(name, tid)
 
     for entry in instance.get("custom_formats") or []:

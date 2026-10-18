@@ -83,10 +83,14 @@ class YAMLGenerator:
         config["quality_definition"] = CommentedMap({"type": qdef_type})
 
         # 3. Custom Format Groups (v8 replaces the removed official include templates)
+        groups = CommentedMap()
+        if instance.cf_group_skip:
+            groups["skip"] = list(instance.cf_group_skip)
         if instance.includes_cfs:
-            config["custom_format_groups"] = CommentedMap({
-                "add": [CommentedMap({"trash_id": tid, **instance.cf_group_options.get(tid, {})}) for tid in instance.includes_cfs]
-            })
+            groups["add"] = [CommentedMap({"trash_id": tid, **instance.cf_group_options.get(tid, {})})
+                             for tid in instance.includes_cfs]
+        if groups:
+            config["custom_format_groups"] = groups
 
         # 4. Quality Profiles (TRaSH Guides guide-backed and/or custom)
         if instance.custom_profiles:

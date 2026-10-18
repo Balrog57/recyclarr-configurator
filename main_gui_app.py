@@ -22,7 +22,9 @@ from ui.widgets.include_tree import IncludeTreeWidget
 from ui.widgets.profile_builder import QualityProfileManager
 from ui.widgets.cf_editor import CFEditor
 from ui.widgets.quick_profile_dialog import QuickProfileDialog
-from core.quick_profile import build_quick_profile
+from core.quick_profile import build_quick_profile, group_add_options, QDEF
+from core.resolver import auto_groups, resolve
+from dataclasses import replace
 from core.paths import app_dir
 from PySide6.QtWidgets import (QProgressDialog, QDialog, QRadioButton, QButtonGroup, 
                                QDialogButtonBox, QLineEdit, QMessageBox, QWidget,
@@ -111,6 +113,7 @@ class InstanceEditor(QWidget):
         
         # State
         self.config = InstanceConfig(name="default", base_url="", api_key="")
+        self.loaded_group_options = {}  # custom_format_groups.add options read from a YAML
         
         self.setup_ui()
         
@@ -141,12 +144,12 @@ class InstanceEditor(QWidget):
         
         gen_layout.addRow(QLabel(" ")) # Spacer
         
-        # 1.2 Quality Definition
+        # 1.2 Quality Definition (types detected from TRaSH quality-size files)
         self.combo_qdef = QComboBox()
-        if self.app_type == "radarr":
-            self.combo_qdef.addItems(["movie", "anime"]) # Radarr types
-        else:
-            self.combo_qdef.addItems(["series", "anime"]) # Sonarr types
+        qdef_types = {(q.get("content") or {}).get("type") or q.get("name")
+                      for q in self.data_manager.get_includes_by_type(self.app_type, "quality-definitions")}
+        default_type = QDEF[self.app_type]
+        self.combo_qdef.addItems(sorted(qdef_types | {default_type}, key=lambda t: (t != default_type, t)))
         gen_layout.addRow("Quality Definition Type:", self.combo_qdef)
         
         # 1.3 Template / Mode
@@ -170,7 +173,8 @@ class InstanceEditor(QWidget):
         
         # --- TAB 2: INCLUDES (Casting) ---
         self.act1_widget = IncludeTreeWidget(self.data_manager)
-        self.act1_widget.load_for_app(self.app_type) 
+        self.act1_widget.load_for_app(self.app_type)
+        self.act1_widget.selection_changed.connect(self._on_casting_changed) 
         self.tabs.addTab(self.act1_widget, "Act 2: Casting")
         
         # --- TAB 3: QUALITY PROFILES (Mise en Scène) ---
@@ -188,80 +192,39 @@ class InstanceEditor(QWidget):
         layout.addWidget(self.tabs)
 
     def on_template_changed(self, index):
-        """Loads template data into other tabs."""
+        """Loads an official Recyclarr v8 template into the acts."""
         self.act3_widget.active_assignments.clear()
-        self.config.cf_group_options = {}
+        self.loaded_group_options = {}
 
         if index == 0:
             # Custom/Manuel: Clear everything to start fresh
-            self.act1_widget.set_selected_includes([])
             self.act2_widget.sync_profiles([])
+            self._select_casting([], [], [])
             self.act3_widget.sync_assignments_from_templates([])
             return
-            
+
         template_data = self.combo_mode.itemData(index)
         if not template_data:
             return
-
         app_content = template_data.get("content", {}).get(self.app_type, {})
         instance_data = list(app_content.values())[0] if app_content else {}
 
-        # 1. Update Quality Definition
-        qdef = instance_data.get("quality_definition", {})
-        if isinstance(qdef, dict) and "type" in qdef:
-            target_type = qdef["type"]
-            idx = self.combo_qdef.findText(target_type)
-            if idx >= 0:
-                self.combo_qdef.setCurrentIndex(idx)
+        self._set_qdef(instance_data)
+        self.act2_widget.sync_profiles(self._guide_profiles(instance_data))
+        self._select_casting_from(instance_data)
+        self._refresh_guide_scores()
 
-        # 2. Update Profiles (Act 3) and Includes selection (Act 2)
-        qp_entries = instance_data.get("quality_profiles", [])
-        profiles_to_load = []
-        selected_include_ids = []
-
-        for qp_entry in qp_entries:
-            if not isinstance(qp_entry, dict):
-                continue
-            trash_id = qp_entry.get("trash_id")
-            if trash_id:
-                selected_include_ids.append(trash_id)
-                guide_qp = self.data_manager.get_quality_profile_by_id(trash_id)
-                if guide_qp:
-                    merged = dict(guide_qp)
-                    if "reset_unmatched_scores" in qp_entry:
-                        merged["reset_unmatched_scores"] = qp_entry["reset_unmatched_scores"]
-                    merged["active"] = True
-                    profiles_to_load.append(merged)
-                else:
-                    profiles_to_load.append({
-                        "name": qp_entry.get("name", "Guide Profile"),
-                        "trash_id": trash_id,
-                        "active": True,
-                        "reset_unmatched_scores": qp_entry.get("reset_unmatched_scores", True)
-                    })
-
-        selected_include_ids += self._cf_group_ids(instance_data)
-        self.act2_widget.sync_profiles(profiles_to_load)
-        self.act1_widget.set_selected_includes(selected_include_ids)
-
-        # 3. Update Tab 4 (CF Assignments)
-        try:
-            resolved_cfs = self.data_manager.resolve_template_includes(self.app_type, template_data)
-            self.act3_widget.sync_assignments_from_templates(resolved_cfs)
-        except Exception as e:
-            logger.exception("Error loading template CFs")
-            
     def open_quick_wizard(self):
-        dialog = QuickProfileDialog(self.app_type, self)
+        dialog = QuickProfileDialog(self.data_manager, self.app_type, self)
         if dialog.exec() == QDialog.Accepted:
             try:
                 self.apply_quick_profile(**dialog.get_values())
             except ValueError as e:
                 QMessageBox.warning(self, "Assistant rapide", str(e))
 
-    def apply_quick_profile(self, anime, tier, ranking, accept_x265=False, accept_av1=False):
+    def apply_quick_profile(self, anime, tier, ranking, accepted=()):
         """Replaces the instance setup with a TRaSH profile tuned to the given preferences."""
-        plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, ranking, accept_x265, accept_av1)
+        plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, ranking, accepted)
         # Custom (Manual) mode, cleared even if it was already selected
         self.combo_mode.blockSignals(True)
         self.combo_mode.setCurrentIndex(0)
@@ -273,15 +236,42 @@ class InstanceEditor(QWidget):
         if plan["score_set"]:
             profile["score_set"] = plan["score_set"]
         self.act2_widget.load_profiles([profile])
-        self.config.cf_group_options = plan["cf_groups"]
-        self.act1_widget.set_selected_includes([plan["profile_trash_id"], *plan["cf_groups"]])
+        self._select_casting([plan["profile_trash_id"]], plan["cf_groups"], [])
         self.act3_widget.load_assignments_from_template(plan["custom_formats"], clear_existing=True)
+        self._refresh_guide_scores()
 
-    @staticmethod
-    def _cf_group_ids(instance_data: dict) -> list:
-        """trash_ids listed under custom_format_groups.add (template or YAML)."""
-        groups = instance_data.get("custom_format_groups") or {}
-        return [g["trash_id"] for g in groups.get("add") or [] if isinstance(g, dict) and "trash_id" in g]
+    def _set_qdef(self, data: dict):
+        qdef = data.get("quality_definition", {})
+        qdef_type = qdef.get("type") if isinstance(qdef, dict) else qdef
+        if qdef_type:
+            if self.combo_qdef.findText(str(qdef_type)) < 0:
+                self.combo_qdef.addItem(str(qdef_type))
+            self.combo_qdef.setCurrentText(str(qdef_type))
+
+    def _guide_profiles(self, data: dict) -> list:
+        """quality_profiles entries merged over their TRaSH guide profile (YAML keys win)."""
+        profiles = []
+        for qp in data.get("quality_profiles") or []:
+            if not isinstance(qp, dict):
+                continue
+            guide_qp = self.data_manager.get_quality_profile_by_id(qp["trash_id"]) if qp.get("trash_id") else None
+            profiles.append({**guide_qp, **qp, "active": True} if guide_qp else {**qp, "active": True})
+        return profiles
+
+    def _select_casting(self, profile_ids, add_ids, skip_ids):
+        """Checks profiles and opt-in groups in Act 2, then marks the default groups Recyclarr auto-syncs."""
+        self.act1_widget.set_selected_includes(list(profile_ids) + list(add_ids))
+        self.act1_widget.set_auto_groups(auto_groups(self.data_manager, self.app_type, profile_ids), skip=skip_ids)
+
+    def _select_casting_from(self, data: dict):
+        groups = data.get("custom_format_groups") or {}
+        profile_ids = [qp["trash_id"] for qp in data.get("quality_profiles") or [] if isinstance(qp, dict) and qp.get("trash_id")]
+        add_ids = [g["trash_id"] for g in groups.get("add") or [] if isinstance(g, dict) and g.get("trash_id")]
+        self._select_casting(profile_ids, add_ids, groups.get("skip") or [])
+
+    def _on_casting_changed(self):
+        selected = self.act1_widget.get_selected_by_type("quality-profiles")
+        self.act1_widget.set_auto_groups(auto_groups(self.data_manager, self.app_type, selected))
 
     def edit_connection_info(self):
         """Opens dialog to edit URL and Key."""
@@ -294,15 +284,15 @@ class InstanceEditor(QWidget):
 
     def update_config_name(self, text):
         self.config.name = text
-        
+
     def on_tab_changed(self, index):
         # Index 2 = Act 3 (Mise en Scène / Quality Profiles)
         if index == 2:
             self._sync_act3_profiles()
 
         # Index 3 = Act 4 (Effets Spéciaux / Custom Formats)
-        elif index == 3: 
-            self._sync_act4_cfs()
+        elif index == 3:
+            self._refresh_guide_scores()
 
     def _sync_act3_profiles(self):
         """Syncs Act 3 profiles from Act 2 selections, keeping existing profiles and their edits."""
@@ -321,97 +311,47 @@ class InstanceEditor(QWidget):
         manager._import_profiles(new_profiles_data, source="include")
         manager.refresh_list()
 
-    def _sync_act4_cfs(self):
-        """Syncs Act 4 CFs from Act 2 selections and Act 3 profiles."""
-        current_profiles = self.act2_widget.get_profiles()
-        profile_names = [p.name for p in current_profiles]
-        self.act3_widget.set_available_profiles(sorted(profile_names))
-
-        selected_includes = self.act1_widget.get_selected_templates()
-        resolved_cfs = []
-
-        for inc_id in selected_includes:
-            inc_data = self.data_manager.get_include_data(self.app_type, inc_id)
-            if not inc_data:
-                continue
-            if inc_data.get("type") == "custom-format":
-                for cf_tid in inc_data.get("trash_ids", []):
-                    resolved_cfs.append({
-                        "trash_ids": [cf_tid],
-                        "assign_scores_to": []
-                    })
-            elif inc_data.get("type") == "quality-profile":
-                p_name = inc_data.get("name", "")
-                score_set = inc_data.get("score_set", "")
-                for cf_name, cf_tid in inc_data.get("formatItems", {}).items():
-                    cf_data = self.data_manager.get_cf_by_id(cf_tid)
-                    trash_scores = cf_data.get("trash_scores", {}) if cf_data else {}
-                    score = trash_scores.get(score_set, trash_scores.get("default", 0)) if trash_scores else 0
-                    resolved_cfs.append({
-                        "trash_ids": [cf_tid],
-                        "assign_scores_to": [{"name": p_name, "score": score}]
-                    })
-
-        if resolved_cfs:
-            self.act3_widget.sync_assignments_from_templates(resolved_cfs)
+    def _refresh_guide_scores(self):
+        """Act 4 base layer: every CF score per profile exactly as Recyclarr will sync it (guide + groups)."""
+        self._sync_act3_profiles()
+        profiles = [p for p in self.act2_widget.get_profiles() if p.active]
+        self.act3_widget.set_available_profiles(sorted(p.name for p in profiles))
+        config = replace(self.get_config(), active_cfs=[])
+        instance = YAMLGenerator()._generate_instance_config(config, default_qdef=QDEF[self.app_type])
+        entries = [{"trash_ids": [tid], "assign_scores_to": [{"name": name, "score": score}]}
+                   for name, p in resolve(instance, self.app_type, self.data_manager).items()
+                   for tid, score in p["cfs"].items()]
+        self.act3_widget.sync_assignments_from_templates(entries)
 
     def load_config(self, data: dict):
         """Populates the editor from a dictionary (YAML data)."""
         self.config.base_url = data.get("base_url", "")
         self.config.api_key = data.get("api_key", "")
         self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", True)
-        
-        # Quality Definition
-        qdef = data.get("quality_definition", {})
-        qdef_type = qdef.get("type") if isinstance(qdef, dict) else qdef
-        if qdef_type:
-            idx = self.combo_qdef.findText(str(qdef_type))
-            if idx >= 0:
-                self.combo_qdef.setCurrentIndex(idx)
-            self.config.quality_definition_type = str(qdef_type)
+        self._set_qdef(data)
+        if data.get("quality_definition"):
+            self.config.quality_definition_type = self.combo_qdef.currentText()
 
-        # Includes
-        includes_data = data.get("include", [])
-        include_ids = []
-        for inc in includes_data:
-            if isinstance(inc, dict) and "template" in inc:
-                include_ids.append(inc["template"])
-        include_ids += [qp["trash_id"] for qp in data.get("quality_profiles") or [] if isinstance(qp, dict) and "trash_id" in qp]
-        include_ids += self._cf_group_ids(data)
+        self.act3_widget.active_assignments.clear()
+        self.act2_widget.load_profiles(self._guide_profiles(data))
+        self._select_casting_from(data)
         groups_add = (data.get("custom_format_groups") or {}).get("add") or []
-        self.config.cf_group_options = {g["trash_id"]: {k: v for k, v in g.items() if k != "trash_id"}
-                                        for g in groups_add if isinstance(g, dict) and len(g) > 1}
-        self.act1_widget.set_selected_includes(include_ids)
-        
-        # Quality Profiles (Resolve guide-backed profiles if only trash_id is present)
-        qp_data = data.get("quality_profiles", [])
-        merged_qp_data = []
-        for qp in qp_data:
-            if isinstance(qp, dict) and "trash_id" in qp:
-                guide_qp = self.data_manager.get_quality_profile_by_id(qp["trash_id"])
-                if guide_qp:
-                    full = dict(guide_qp)
-                    full.update(qp)
-                    full["active"] = True
-                    merged_qp_data.append(full)
-                else:
-                    merged_qp_data.append(qp)
-            else:
-                merged_qp_data.append(qp)
-
-        self.act2_widget.load_profiles(merged_qp_data)
-        
-        # Custom Formats
-        cf_data = data.get("custom_formats", [])
-        self.act3_widget.load_assignments_from_template(cf_data, clear_existing=True)
+        self.loaded_group_options = {g["trash_id"]: {k: v for k, v in g.items() if k != "trash_id"}
+                                     for g in groups_add if isinstance(g, dict) and len(g) > 1}
+        self.act3_widget.load_assignments_from_template(data.get("custom_formats") or [], clear_existing=True)
 
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""
         self.config.quality_definition_type = self.combo_qdef.currentText()
-        self.config.includes_quality_defs = self.act1_widget.get_selected_by_type("quality-definition")
-        self.config.includes_profiles = self.act1_widget.get_selected_by_type("quality-profiles")
-        self.config.includes_cfs = self.act1_widget.get_selected_by_type("custom-formats")
+        self.config.includes_cfs, self.config.cf_group_skip = self.act1_widget.group_state()
         self.config.custom_profiles = self.act2_widget.get_profiles()
+        # Added groups get what Recyclarr needs to apply them (assign_scores_to, select...) unless the YAML set it
+        targets = [(p.name, p.trash_id, p.score_set or (self.data_manager.get_quality_profile_by_id(p.trash_id) or {}).get("score_set"))
+                   for p in self.config.custom_profiles if p.active]
+        self.config.cf_group_options = {
+            gid: self.loaded_group_options.get(gid) or group_add_options(self.data_manager, self.app_type, gid, targets)
+            for gid in self.config.includes_cfs
+        }
         self.config.active_cfs = list(self.act3_widget.active_assignments.values())
         return self.config
 
@@ -760,6 +700,13 @@ class MainWindow(QMainWindow):
                 if isinstance(editor, InstanceEditor):
                     editor.load_config(config_data)
                 
+        # Recyclarr v8 removed the official include templates: say what was dropped
+        v7 = [inc["template"] for app in ("radarr", "sonarr") for inst in (data.get(app) or {}).values()
+              if isinstance(inst, dict) for inc in inst.get("include") or [] if isinstance(inc, dict) and "template" in inc]
+        if v7:
+            QMessageBox.warning(self, "Recyclarr v7 includes",
+                                "These v7 include templates no longer exist in Recyclarr v8 and were ignored:\n"
+                                + "\n".join(v7) + "\n\nPick a v8 template or use the quick wizard (Act 1).")
         QMessageBox.information(self, "Success", "Configuration loaded!")
 
 def main():

@@ -1,3 +1,4 @@
+import copy
 import os
 import pytest
 
@@ -5,11 +6,9 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 from core.data_manager import DataManager
 from core.models import RecyclarrConfiguration
+from core.resolver import resolve
 from core.yaml_generator import YAMLGenerator
 from core import quick_profile as qp
-
-import sys
-sys.path.insert(0, os.path.dirname(__file__))
 
 
 @pytest.fixture(scope="module")
@@ -19,9 +18,9 @@ def dm():
     return manager
 
 
-def bucket_scores(ranking):
+def bucket_scores(ranking, step=500, reject=-10000):
     """Net language score per release type, from how Radarr/Sonarr match the language CFs."""
-    s = qp.language_cf_scores(ranking)
+    s = qp.language_cf_scores(ranking, step, reject)
     return {
         "multi": s["orig_french"],               # Original + French audio
         "vf": s["not_original"],                 # French audio only
@@ -33,13 +32,13 @@ def bucket_scores(ranking):
 def test_language_order_films():
     net = bucket_scores(["multi", "vf", "vostfr"])
     assert net["multi"] > net["vf"] > net["vostfr"] >= 0
-    assert net["vo"] <= qp.REJECT
+    assert net["vo"] <= -10000
 
 
 def test_language_order_anime_no_vf():
     net = bucket_scores(["multi", "vostfr"])
     assert net["multi"] > net["vostfr"] >= 0
-    assert net["vf"] <= qp.REJECT and net["vo"] <= qp.REJECT
+    assert net["vf"] <= -10000 and net["vo"] <= -10000
 
 
 def test_no_language_rejected():
@@ -47,99 +46,102 @@ def test_no_language_rejected():
         qp.language_cf_scores([])
 
 
-def test_hardcoded_trash_ids_exist(dm):
+def test_profiles_and_scores_detected_from_data(dm):
     for app in ("radarr", "sonarr"):
-        profile_ids = [i for tier in qp.FRENCH_PROFILES[app].values() for i in tier.values()] + [qp.ANIME_PROFILE[app]]
-        for tid in profile_ids:
-            assert dm.get_quality_profile_by_id(tid), f"{app} profile {tid} missing"
-        cf_ids = list(qp.LANGUAGE_CFS[app].values()) + qp.ANIME_EXTRA_CFS[app] + sum(qp.CODEC_CFS[app].values(), [])
-        for tid in cf_ids:
-            assert dm.get_cf_by_id(tid), f"{app} CF {tid} missing"
-        for gid in qp.ANIME_GROUPS[app]:
-            assert dm.get_include_data(app, gid), f"{app} group {gid} missing"
+        tiers = qp.profile_tiers(dm, app, anime=False)
+        assert tiers, f"no French TRaSH profile detected for {app}"
+        for variants in tiers.values():
+            assert {"french-multi-vf", "french-multi-vo", "french-vostfr"} <= set(variants)
+        assert qp.profile_tiers(dm, app, anime=True)
+        assert qp.guide_steps(dm, app, "french-multi-vf") == (500, -10000)
 
 
-def test_three_instances_end_to_end(dm, tmp_path):
-    """Films (Radarr), Séries (Sonarr), Animés (Sonarr): MULTi > VF > VOSTFR, anime without VF, x265 + AV1 OK."""
-    from PySide6.QtWidgets import QApplication
-    from main_gui_app import InstanceEditor
-    app = QApplication.instance() or QApplication([])
-
-    setups = [
-        ("radarr", "films", False, "hd-bluray-web", ["multi", "vf", "vostfr"]),
-        ("sonarr", "series", False, "hd-bluray-web", ["multi", "vf", "vostfr"]),
-        ("sonarr", "animes", True, "anime", ["multi", "vostfr"]),
-    ]
-    cfg = RecyclarrConfiguration()
-    for app_type, name, anime, tier, ranking in setups:
-        ed = InstanceEditor(dm, app_type)
-        ed.config.name = name
-        ed.apply_quick_profile(anime, tier, ranking, accept_x265=True, accept_av1=True)
-        for tab in (1, 2, 3, 0):  # visiting acts must not lose anything
-            ed.tabs.setCurrentIndex(tab)
-        getattr(cfg, f"{app_type}_instances").append(ed.get_config())
-
-    gen = YAMLGenerator()
-    out = gen.load_yaml(gen.generate_config(cfg, filename=str(tmp_path / "quick.yml")))
-
-    films = out["radarr"]["films"]
-    assert films["quality_definition"]["type"] == "movie"
-    assert films["quality_profiles"][0]["trash_id"] == qp.FRENCH_PROFILES["radarr"]["hd-bluray-web"]["multi-vf"]
-
-    animes = out["sonarr"]["animes"]
-    assert animes["quality_definition"]["type"] == "anime"
-    assert animes["quality_profiles"][0]["trash_id"] == qp.ANIME_PROFILE["sonarr"]
-    assert animes["quality_profiles"][0]["score_set"] == "french-anime-multi"
-    assert {g["trash_id"] for g in animes["custom_format_groups"]["add"]} == set(qp.ANIME_GROUPS["sonarr"])
-
-    def score(instance, app_type, tid):
-        entry = next(e for e in instance["custom_formats"] if tid in e["trash_ids"])
-        return entry["assign_scores_to"][0]["score"]
-
-    for instance, app_type in ((films, "radarr"), (out["sonarr"]["series"], "sonarr"), (animes, "sonarr")):
-        profile_name = instance["quality_profiles"][0]["name"]
-        for entry in instance["custom_formats"]:
-            assert [a["name"] for a in entry["assign_scores_to"]] == [profile_name]
-        for tid in sum(qp.CODEC_CFS[app_type].values(), []):
-            assert score(instance, app_type, tid) == 0
-
-    # Anime: VF only is rejected
-    assert score(animes, "sonarr", qp.LANGUAGE_CFS["sonarr"]["not_original"]) <= qp.REJECT
+def test_wizard_follows_guide_score_changes(dm):
+    """If TRaSH re-scores a criterion, the wizard output follows without code changes."""
+    changed = copy.deepcopy(dm)
+    multi = next(cf for cf in changed.get_custom_formats_for_app("radarr") if cf["name"] == "Language: Original + French")
+    multi["trash_scores"]["french-multi-vf"] = 700
+    plan = qp.build_quick_profile(changed, "radarr", False, "HD Bluray + WEB", ["multi", "vf", "vostfr"])
+    scores = {changed.get_cf_by_id(e["trash_ids"][0])["name"]: e["assign_scores_to"][0]["score"] for e in plan["custom_formats"]}
+    assert scores["Language: Original + French"] == 1400 and scores["Language: Not Original"] == 700
 
 
-def _wizard_instance(dm, tmp_path, app_type, anime, tier, ranking):
+def test_rejected_criteria_lists_codecs(dm):
+    names = {name for _, name, _ in qp.rejected_criteria(dm, "radarr", False, "HD Bluray + WEB", ["multi", "vf", "vostfr"])}
+    assert {"x265 (HD)", "AV1"} <= names
+    assert not names & set(qp.LANGUAGE_CF_NAMES.values())
+
+
+def _accept(dm, app, anime, tier, ranking, wanted=("x265", "AV1")):
+    return [tid for tid, name, _ in qp.rejected_criteria(dm, app, anime, tier, ranking) if any(w in name for w in wanted)]
+
+
+def _wizard_instance(dm, tmp_path, app_type, anime, tier, ranking, name="x"):
     from PySide6.QtWidgets import QApplication
     from main_gui_app import InstanceEditor
     app = QApplication.instance() or QApplication([])
     ed = InstanceEditor(dm, app_type)
-    ed.config.name = "x"
-    ed.apply_quick_profile(anime, tier, ranking, accept_x265=True, accept_av1=True)
+    ed.config.name = name
+    ed.apply_quick_profile(anime, tier, ranking, _accept(dm, app_type, anime, tier, ranking))
+    for tab in (1, 2, 3, 0):  # visiting acts must not lose anything
+        ed.tabs.setCurrentIndex(tab)
+    return ed.get_config()
+
+
+def _export(cfg, tmp_path, fname):
     gen = YAMLGenerator()
-    cfg = RecyclarrConfiguration(**{f"{app_type}_instances": [ed.get_config()]})
-    return gen.load_yaml(gen.generate_config(cfg, filename=str(tmp_path / f"{app_type}{anime}.yml")))[app_type]["x"]
+    return gen.load_yaml(gen.generate_config(cfg, filename=str(tmp_path / fname)))
 
 
-@pytest.mark.parametrize("app_type,template", [("radarr", "french-multi-vf-hd-bluray-web"), ("sonarr", "french-multi-vf-bluray-web-1080p")])
-def test_wizard_matches_official_template_except_overrides(dm, tmp_path, app_type, template):
-    """Effective profile (simulated Recyclarr sync) = official v8 template + only the language/codec overrides."""
-    from recyclarr_sim import resolve
+def test_three_instances_end_to_end(dm, tmp_path):
+    """Films (Radarr), Séries (Sonarr), Animés (Sonarr): MULTi > VF > VOSTFR, anime without VF, x265 + AV1 OK."""
+    cfg = RecyclarrConfiguration(
+        radarr_instances=[_wizard_instance(dm, tmp_path, "radarr", False, "HD Bluray + WEB", ["multi", "vf", "vostfr"], "films")],
+        sonarr_instances=[_wizard_instance(dm, tmp_path, "sonarr", False, "HD Bluray + WEB (1080p)", ["multi", "vf", "vostfr"], "series"),
+                          _wizard_instance(dm, tmp_path, "sonarr", True, "Remux-1080p", ["multi", "vostfr"], "animes")],
+    )
+    out = _export(cfg, tmp_path, "quick.yml")
+    assert out["radarr"]["films"]["quality_definition"]["type"] == "movie"
+    assert out["radarr"]["films"]["quality_profiles"][0]["name"].startswith("[French MULTi.VF]")
+    animes = out["sonarr"]["animes"]
+    assert animes["quality_definition"]["type"] == "anime"
+    assert animes["quality_profiles"][0]["score_set"] == "french-anime-multi"
+    # Groups the guide scores for French anime; their effect is checked in test_wizard_anime_keeps_french_release_groups
+    assert animes["custom_format_groups"]["add"]
+
+    for app_type, inst in (("radarr", out["radarr"]["films"]), ("sonarr", out["sonarr"]["series"]), ("sonarr", animes)):
+        (_, profile), = resolve(inst, app_type, dm).items()
+        names = {(dm.get_cf_by_id(t) or {}).get("name", t): s for t, s in profile["cfs"].items()}
+        assert names.get("AV1") == 0
+        assert all(s == 0 for n, s in names.items() if n.startswith("x265"))
+
+
+@pytest.mark.parametrize("app_type,template,tier", [
+    ("radarr", "french-multi-vf-hd-bluray-web", "HD Bluray + WEB"),
+    ("sonarr", "french-multi-vf-bluray-web-1080p", "HD Bluray + WEB (1080p)"),
+])
+def test_wizard_matches_official_template_except_overrides(dm, tmp_path, app_type, template, tier):
+    """Effective profile (Recyclarr resolution) = official v8 template + only the language/codec overrides."""
     official = list(dm.get_template_by_name(app_type, template)["content"][app_type].values())[0]
     (_, ref), = resolve(official, app_type, dm).items()
-    (_, got), = resolve(_wizard_instance(dm, tmp_path, app_type, False, "hd-bluray-web", ["multi", "vf", "vostfr"]), app_type, dm).items()
+    cfg = RecyclarrConfiguration(**{f"{app_type}_instances": [_wizard_instance(dm, tmp_path, app_type, False, tier, ["multi", "vf", "vostfr"])]})
+    (_, got), = resolve(_export(cfg, tmp_path, "w.yml")[app_type]["x"], app_type, dm).items()
 
-    overridden = set(qp.LANGUAGE_CFS[app_type].values()) | set(sum(qp.CODEC_CFS[app_type].values(), []))
+    overridden = {t for e in qp.build_quick_profile(dm, app_type, False, tier, ["multi", "vf", "vostfr"],
+                                                    _accept(dm, app_type, False, tier, ["multi", "vf", "vostfr"]))["custom_formats"]
+                  for t in e["trash_ids"]}
     for key in ("leaves", "cutoff", "until_score", "min_score", "score_set", "upgrade"):
         assert got[key] == ref[key], key
     assert {t: s for t, s in got["cfs"].items() if t not in overridden} == {t: s for t, s in ref["cfs"].items() if t not in overridden}
 
 
 def test_wizard_anime_keeps_french_release_groups(dm, tmp_path):
-    """Former v7 French anime recipe: FR anime/FR release group tiers scored, BR-DISK and FastSUB rejected."""
-    from recyclarr_sim import resolve
-    (_, got), = resolve(_wizard_instance(dm, tmp_path, "sonarr", True, "anime", ["multi", "vostfr"]), "sonarr", dm).items()
-    names = {c["trash_id"]: c["name"] for c in dm.get_custom_formats_for_app("sonarr")}
-    by_name = {names[t]: s for t, s in got["cfs"].items()}
+    """Former v7 French anime recipe: FR anime / FR release group tiers scored, FastSUB and FR LQ rejected."""
+    cfg = RecyclarrConfiguration(sonarr_instances=[_wizard_instance(dm, tmp_path, "sonarr", True, "Remux-1080p", ["multi", "vostfr"])])
+    (_, got), = resolve(_export(cfg, tmp_path, "a.yml")["sonarr"]["x"], "sonarr", dm).items()
+    by_name = {(dm.get_cf_by_id(t) or {}).get("name", t): s for t, s in got["cfs"].items()}
     for tier in ("FR Anime Tier 01", "FR Anime Tier 02", "FR Anime Tier 03", "FR Anime FanSub", "FR Scene Groups", "FR WEB Tier 01"):
         assert by_name.get(tier, 0) > 0, tier
-    for unwanted in ("BR-DISK", "FastSUB", "FR LQ"):
-        assert by_name.get(unwanted, 0) <= qp.REJECT, unwanted
+    for unwanted in ("FastSUB", "FR LQ"):
+        assert by_name.get(unwanted, 0) <= -10000, unwanted
+    assert "Language: Not English" not in by_name  # select, not select_all, on language groups

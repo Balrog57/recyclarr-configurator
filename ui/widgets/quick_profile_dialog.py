@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (QDialog, QFormLayout, QComboBox, QListWidget, QListWidgetItem,
-                               QAbstractItemView, QCheckBox, QLabel, QDialogButtonBox, QHBoxLayout, QPushButton,
+                               QAbstractItemView, QLabel, QDialogButtonBox, QHBoxLayout, QPushButton,
                                QVBoxLayout, QWidget)
 from PySide6.QtCore import Qt
 
-from core.quick_profile import LANGUAGES, tiers_for, describe
+from core.quick_profile import LANGUAGES, profile_tiers, rejected_criteria, describe
 
 # Default language order and accepted set per content type
 DEFAULTS = {
@@ -13,12 +13,13 @@ DEFAULTS = {
 
 
 class QuickProfileDialog(QDialog):
-    """Quick setup: pick content, quality, language order and codecs; the rest is TRaSH Guides."""
-    def __init__(self, app_type: str, parent=None):
+    """Quick setup: content, quality, language order and accepted criteria; everything else is TRaSH Guides."""
+    def __init__(self, data_manager, app_type: str, parent=None):
         super().__init__(parent)
+        self.dm = data_manager
         self.app_type = app_type
         self.setWindowTitle("Assistant rapide")
-        self.resize(520, 480)
+        self.resize(560, 640)
         layout = QFormLayout(self)
 
         self.combo_content = QComboBox()
@@ -27,7 +28,7 @@ class QuickProfileDialog(QDialog):
         layout.addRow("Contenu :", self.combo_content)
 
         self.combo_tier = QComboBox()
-        layout.addRow("Qualité :", self.combo_tier)
+        layout.addRow("Qualité (profils TRaSH) :", self.combo_tier)
 
         # Language order: check to accept, drag (or buttons) to reorder
         self.list_lang = QListWidget()
@@ -56,12 +57,13 @@ class QuickProfileDialog(QDialog):
         self.lbl_summary.setStyleSheet("color: #888;")
         layout.addRow(self.lbl_summary)
 
-        self.chk_x265 = QCheckBox("Accepter x265 / HEVC")
-        self.chk_av1 = QCheckBox("Accepter AV1")
-        self.chk_x265.setChecked(True)
-        self.chk_av1.setChecked(True)
-        layout.addRow("Codecs :", self.chk_x265)
-        layout.addRow("", self.chk_av1)
+        # Criteria the guide rejects in this profile (read from TRaSH data): check to accept them
+        lbl_crit = QLabel("Critères refusés par TRaSH dans ce profil : cochez ceux que vous acceptez (ex. x265, AV1)")
+        lbl_crit.setWordWrap(True)
+        layout.addRow(lbl_crit)
+        self.list_criteria = QListWidget()
+        self.list_criteria.setMinimumHeight(150)
+        layout.addRow(self.list_criteria)
 
         hint = QLabel("Prérequis TRaSH : dans les indexeurs, réglez « Multi Languages » sur Original + French.")
         hint.setWordWrap(True)
@@ -74,15 +76,18 @@ class QuickProfileDialog(QDialog):
         layout.addRow(self.buttons)
 
         self.combo_content.currentIndexChanged.connect(self._on_content_changed)
+        self.combo_tier.currentIndexChanged.connect(self._refresh_criteria)
         self.list_lang.itemChanged.connect(self._update_summary)
         self.list_lang.model().rowsMoved.connect(self._update_summary)
         self._on_content_changed()
 
     def _on_content_changed(self):
         anime = self.combo_content.currentData()
+        self.combo_tier.blockSignals(True)
         self.combo_tier.clear()
-        for key, label in tiers_for(self.app_type, anime).items():
-            self.combo_tier.addItem(label, key)
+        for label in profile_tiers(self.dm, self.app_type, anime):
+            self.combo_tier.addItem(label, label)
+        self.combo_tier.blockSignals(False)
         order, accepted = DEFAULTS[anime]
         self.list_lang.blockSignals(True)
         self.list_lang.clear()
@@ -111,10 +116,29 @@ class QuickProfileDialog(QDialog):
     def _update_summary(self, *args):
         ranking = self.ranking()
         self.lbl_summary.setText(describe(ranking))
-        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(ranking))
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(ranking) and self.combo_tier.count() > 0)
+        self._refresh_criteria()
+
+    def _refresh_criteria(self, *args):
+        """The base profile depends on content, tier and top language: list what it rejects."""
+        kept = set(self.accepted())
+        self.list_criteria.clear()
+        if not self.ranking() or self.combo_tier.count() == 0:
+            return
+        for tid, name, score in rejected_criteria(self.dm, self.app_type, self.combo_content.currentData(),
+                                                  self.combo_tier.currentData(), self.ranking()):
+            item = QListWidgetItem(f"{name}  ({score})")
+            item.setData(Qt.UserRole, tid)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if tid in kept else Qt.Unchecked)
+            self.list_criteria.addItem(item)
 
     def ranking(self) -> list:
         items = [self.list_lang.item(i) for i in range(self.list_lang.count())]
+        return [it.data(Qt.UserRole) for it in items if it.checkState() == Qt.Checked]
+
+    def accepted(self) -> list:
+        items = [self.list_criteria.item(i) for i in range(self.list_criteria.count())]
         return [it.data(Qt.UserRole) for it in items if it.checkState() == Qt.Checked]
 
     def get_values(self) -> dict:
@@ -122,6 +146,5 @@ class QuickProfileDialog(QDialog):
             "anime": self.combo_content.currentData(),
             "tier": self.combo_tier.currentData(),
             "ranking": self.ranking(),
-            "accept_x265": self.chk_x265.isChecked(),
-            "accept_av1": self.chk_av1.isChecked(),
+            "accepted": self.accepted(),
         }

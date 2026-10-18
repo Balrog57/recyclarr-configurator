@@ -15,15 +15,15 @@ A modern graphical application (PySide6) to generate YAML configuration files fo
 
 This revised version brings a complete overhaul of the user experience, structured into **4 Acts** for intuitive configuration:
 *   **Act 1 - The Script**: Base settings and Template selection.
-*   **Act 2 - The Casting**: Include libraries (Custom Formats, Quality Defs).
+*   **Act 2 - The Casting**: TRaSH guide-backed profiles and CF groups (auto / add / skip).
 *   **Act 3 - Staging**: Advanced quality profile creation (Drag & Drop, Groups).
-*   **Act 4 - Special Effects**: Custom Format editor with smart score inference and comments.
+*   **Act 4 - Special Effects**: Custom Format editor showing the guide scores Recyclarr will apply, with per-profile overrides.
 
 ## ✨ Features
 
 *   **🎨 "Dark Cinema" Interface**: Immersive and responsive dark theme.
 *   **📱 Multi-Instance Management**: Dynamic tabs to manage Radarr 4K, Radarr 1080p, Sonarr, etc.
-*   **⚡ Quick Wizard**: Language order (MULTi > VF > VOSTFR…), quality and codecs (x265, AV1) in a few clicks, on top of TRaSH Guides profiles (Recyclarr v8).
+*   **⚡ Quick Wizard**: Language order (MULTi > VF > VOSTFR…), quality and accepted criteria (x265, AV1…) in a few clicks, on top of TRaSH Guides profiles (Recyclarr v8). Profiles, criteria and scores are detected from TRaSH data, so it stays up to date.
 *   **💼 Portable**: Single `.exe`, data kept next to it, works from any folder.
 *   **🔄 Auto Sync**: Automatically downloads the latest TRaSH Guides data at startup.
 *   **📂 Import Configuration**: Load existing YAML files to modify your setup.

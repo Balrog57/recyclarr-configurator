@@ -43,10 +43,9 @@ class InstanceConfig:
     api_key: str
     quality_definition_type: str = "movie" # movie, anime, ou series
     delete_old_custom_formats: bool = True
-    # Les includes granulaires
-    includes_quality_defs: List[str] = field(default_factory=list)
-    includes_profiles: List[str] = field(default_factory=list)
+    # custom_format_groups: opt-in groups (add) and auto-synced default groups opted out (skip)
     includes_cfs: List[str] = field(default_factory=list)
+    cf_group_skip: List[str] = field(default_factory=list)
     # Extra keys per CF group in custom_format_groups.add (select_all, select, exclude, assign_scores_to)
     cf_group_options: Dict[str, dict] = field(default_factory=dict)
     # Les créations manuelles
