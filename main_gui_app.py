@@ -181,80 +181,73 @@ class InstanceEditor(QWidget):
 
     def on_template_changed(self, index):
         """Loads template data into other tabs."""
-        # Always clear active overrides when changing mode/template
         self.act3_widget.active_assignments.clear()
 
         if index == 0:
             # Custom/Manuel: Clear everything to start fresh
             self.act1_widget.set_selected_includes([])
+            self.act2_widget.sync_profiles([])
             self.act3_widget.sync_assignments_from_templates([])
             return
             
         template_data = self.combo_mode.itemData(index)
         if not template_data:
             return
-            
-        # 1. Update Tab 2 (Includes)
-        includes = template_data.get("includes", [])
-        self.act1_widget.set_selected_includes(includes)
-        
-        # 2. Update Tab 4 (CF Assignments)
-        # Parse content -> app -> instance_key -> custom_formats
+
+        app_content = template_data.get("content", {}).get(self.app_type, {})
+        instance_data = list(app_content.values())[0] if app_content else {}
+
+        # 1. Update Quality Definition
+        qdef = instance_data.get("quality_definition", {})
+        if isinstance(qdef, dict) and "type" in qdef:
+            target_type = qdef["type"]
+            idx = self.combo_qdef.findText(target_type)
+            if idx >= 0:
+                self.combo_qdef.setCurrentIndex(idx)
+
+        # 2. Update Profiles (Act 3) and Includes selection (Act 2)
+        qp_entries = instance_data.get("quality_profiles", [])
+        profiles_to_load = []
+        selected_include_ids = []
+
+        for qp_entry in qp_entries:
+            if not isinstance(qp_entry, dict):
+                continue
+            trash_id = qp_entry.get("trash_id")
+            if trash_id:
+                selected_include_ids.append(trash_id)
+                guide_qp = self.data_manager.get_quality_profile_by_id(trash_id)
+                if guide_qp:
+                    merged = dict(guide_qp)
+                    if "reset_unmatched_scores" in qp_entry:
+                        merged["reset_unmatched_scores"] = qp_entry["reset_unmatched_scores"]
+                    merged["active"] = True
+                    profiles_to_load.append(merged)
+                else:
+                    profiles_to_load.append({
+                        "name": qp_entry.get("name", "Guide Profile"),
+                        "trash_id": trash_id,
+                        "active": True,
+                        "reset_unmatched_scores": qp_entry.get("reset_unmatched_scores", True)
+                    })
+
+        selected_include_ids += self._cf_group_ids(instance_data)
+        self.act2_widget.sync_profiles(profiles_to_load)
+        self.act1_widget.set_selected_includes(selected_include_ids)
+
+        # 3. Update Tab 4 (CF Assignments)
         try:
-            # Recursively resolve ALL custom_formats from includes + template itself
-            merged_cfs = self.data_manager.resolve_template_includes(self.app_type, template_data)
-            
-            # Also check the top-level 'content' for the main template's direct CFs (which resolve_template_includes does, but let's be sure we are looking at the right structure)
-            # resolve_template_includes looks at 'custom_formats' key at root of template/include.
-            # But in 'templates.json', for the main template, it is nested in 'content -> app -> [config] -> custom_formats'.
-            # Wait, resolve_template_includes expects the dict having 'custom_formats'.
-            
-            # For the main template, we need to extract the 'custom_formats' list from the nested structure FIRST, 
-            # OR pass the nested structure as a "virtual include"?
-            
-            # Actually, let's look at a template structure:
-            # { "name": ..., "includes": [...], "content": { "sonarr": { "hd-bluray-web": { "custom_formats": [...] } } } }
-            
-            # My resolve_template_includes checks `root_template["custom_formats"]`.
-            # So for the root template, I need to extract the CFs from the content first and pass it, OR update logic.
-            # But included templates (raw includes) often have `custom_formats` at top level (for CF includes) OR inside content (for profile bundles).
-            
-            # Let's simple append the root template's nested CFs manually to the resolved list from includes.
-            
-            # 1. Get Includes CFs
             resolved_cfs = self.data_manager.resolve_template_includes(self.app_type, template_data)
-            
-            # 2. Get Root Template CFs (if any, nested in content)
-            app_content = template_data.get("content", {}).get(self.app_type, {})
-            if app_content:
-                config_key = list(app_content.keys())[0]
-                config_data = app_content[config_key]
-                if config_data:
-                    root_cfs = config_data.get("custom_formats") or []
-                    if isinstance(root_cfs, list):
-                        resolved_cfs.extend(root_cfs)
-                    else:
-                        logger.warning(f"Ignored non-list custom_formats in root template: {type(root_cfs)}")
-                
-            # Load as base layer (template assignments), not active overrides
             self.act3_widget.sync_assignments_from_templates(resolved_cfs)
         except Exception as e:
-            import traceback
-            logger.error(f"Error loading template CFs: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception("Error loading template CFs")
             
-        # 3. Update Tab 3 (Profile)
-        # Find which include is the quality profile
-        # Heuristic: contains "quality-profile" in name
-        qp_include_name = next((inc for inc in includes if "quality-profile" in inc), None)
-        
-        if qp_include_name:
-             # Just trigger sync logic which we moved to separate method, 
-             # but we can't easily call it without events. 
-             # For now, rely on Tab Change to sync.
-             pass
+    @staticmethod
+    def _cf_group_ids(instance_data: dict) -> list:
+        """trash_ids listed under custom_format_groups.add (template or YAML)."""
+        groups = instance_data.get("custom_format_groups") or {}
+        return [g["trash_id"] for g in groups.get("add") or [] if isinstance(g, dict) and "trash_id" in g]
 
-        
     def edit_connection_info(self):
         """Opens dialog to edit URL and Key."""
         dialog = InstanceSettingsDialog(self, self.config.base_url, self.config.api_key)
@@ -277,102 +270,111 @@ class InstanceEditor(QWidget):
             self._sync_act4_cfs()
 
     def _sync_act3_profiles(self):
-        """Syncs Act 3 profiles from Act 2 selections."""
-        selected_includes = self.act1_widget.get_selected_templates()
+        """Syncs Act 3 profiles from Act 2 selections, keeping existing profiles and their edits."""
+        selected = self.act1_widget.get_selected_by_type("quality-profiles")
+        manager = self.act2_widget
+        manager.profiles = [p for p in manager.profiles if not p.trash_id or p.trash_id in selected]
+        present = {p.trash_id for p in manager.profiles}
+
         new_profiles_data = []
+        for trash_id in selected:
+            guide_qp = self.data_manager.get_quality_profile_by_id(trash_id)
+            if guide_qp and trash_id not in present:
+                # Checked in Act 2 means wanted in the config
+                new_profiles_data.append({**guide_qp, "active": True})
 
-        for inc_name in selected_includes:
-            # Heuristic: Name contains "quality-profile"
-            if "quality-profile" in inc_name.lower():
-                # Loop up include data
-                inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
-                if inc_data and "content" in inc_data:
-                    qp_list = inc_data["content"].get("quality_profiles", [])
-                    new_profiles_data.extend(qp_list)
-
-        # Call sync on Act 2 widget (Profile Manager)
-        # It handles preserving custom profiles + refreshing includes
-        if new_profiles_data:
-            self.act2_widget.sync_profiles(new_profiles_data)
-        else:
-             self.act2_widget.sync_profiles([])
+        manager._import_profiles(new_profiles_data, source="include")
+        manager.refresh_list()
 
     def _sync_act4_cfs(self):
         """Syncs Act 4 CFs from Act 2 selections and Act 3 profiles."""
-        
-        # 1. Update Columns (Available Profiles from Act 3)
         current_profiles = self.act2_widget.get_profiles()
         profile_names = [p.name for p in current_profiles]
         self.act3_widget.set_available_profiles(sorted(profile_names))
-        
-        # 2. Update Rows/Scores (From Act 2 CF Bundles)
+
         selected_includes = self.act1_widget.get_selected_templates()
-        # We need to resolve all CFs from these includes
         resolved_cfs = []
-        
-        for inc_name in selected_includes:
-            # Heuristic: Name contains "custom-formats"
-            if "custom-formats" in inc_name.lower():
-                inc_data = self.data_manager.get_include_data(self.app_type, inc_name)
-                if inc_data:
-                    content = inc_data.get("content", {})
-                    # Try top level of content
-                    cfs = content.get("custom_formats", [])
-                    if cfs:
-                        resolved_cfs.extend(cfs)
-                    
-                    # Try nested (standard recyclarr config structure)
-                    app_c = content.get(self.app_type, {})
-                    if app_c:
-                         for k, v in app_c.items():
-                             if isinstance(v, dict) and "custom_formats" in v:
-                                 resolved_cfs.extend(v["custom_formats"])
-        
-        # Sync Act 4
-        self.act3_widget.sync_assignments_from_templates(resolved_cfs)
+
+        for inc_id in selected_includes:
+            inc_data = self.data_manager.get_include_data(self.app_type, inc_id)
+            if not inc_data:
+                continue
+            if inc_data.get("type") == "custom-format":
+                for cf_tid in inc_data.get("trash_ids", []):
+                    resolved_cfs.append({
+                        "trash_ids": [cf_tid],
+                        "assign_scores_to": []
+                    })
+            elif inc_data.get("type") == "quality-profile":
+                p_name = inc_data.get("name", "")
+                score_set = inc_data.get("score_set", "")
+                for cf_name, cf_tid in inc_data.get("formatItems", {}).items():
+                    cf_data = self.data_manager.get_cf_by_id(cf_tid)
+                    trash_scores = cf_data.get("trash_scores", {}) if cf_data else {}
+                    score = trash_scores.get(score_set, trash_scores.get("default", 0)) if trash_scores else 0
+                    resolved_cfs.append({
+                        "trash_ids": [cf_tid],
+                        "assign_scores_to": [{"name": p_name, "score": score}]
+                    })
+
+        if resolved_cfs:
+            self.act3_widget.sync_assignments_from_templates(resolved_cfs)
 
     def load_config(self, data: dict):
         """Populates the editor from a dictionary (YAML data)."""
-        # 1. Config Basics
         self.config.base_url = data.get("base_url", "")
         self.config.api_key = data.get("api_key", "")
         self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", True)
-        self.config.replace_existing_custom_formats = data.get("replace_existing_custom_formats", True)
         
-        # 2. Includes
-        # YAML: include: [ { template: "..." }, ... ]
+        # Quality Definition
+        qdef = data.get("quality_definition", {})
+        qdef_type = qdef.get("type") if isinstance(qdef, dict) else qdef
+        if qdef_type:
+            idx = self.combo_qdef.findText(str(qdef_type))
+            if idx >= 0:
+                self.combo_qdef.setCurrentIndex(idx)
+            self.config.quality_definition_type = str(qdef_type)
+
+        # Includes
         includes_data = data.get("include", [])
         include_ids = []
         for inc in includes_data:
             if isinstance(inc, dict) and "template" in inc:
                 include_ids.append(inc["template"])
-        
+        include_ids += [qp["trash_id"] for qp in data.get("quality_profiles") or [] if isinstance(qp, dict) and "trash_id" in qp]
+        include_ids += self._cf_group_ids(data)
         self.act1_widget.set_selected_includes(include_ids)
         
-        # 3. Quality Profiles
+        # Quality Profiles (Resolve guide-backed profiles if only trash_id is present)
         qp_data = data.get("quality_profiles", [])
-        self.act2_widget.load_profiles(qp_data)
+        merged_qp_data = []
+        for qp in qp_data:
+            if isinstance(qp, dict) and "trash_id" in qp:
+                guide_qp = self.data_manager.get_quality_profile_by_id(qp["trash_id"])
+                if guide_qp:
+                    full = dict(guide_qp)
+                    full.update(qp)
+                    full["active"] = True
+                    merged_qp_data.append(full)
+                else:
+                    merged_qp_data.append(qp)
+            else:
+                merged_qp_data.append(qp)
+
+        self.act2_widget.load_profiles(merged_qp_data)
         
-        # 4. Custom Formats
+        # Custom Formats
         cf_data = data.get("custom_formats", [])
         self.act3_widget.load_assignments_from_template(cf_data, clear_existing=True)
 
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""
-        # 1. Config (URL/Key are stored in self.config via dialog)
-        # Name is synced
-        
-        # 2. Includes (categorized)
+        self.config.quality_definition_type = self.combo_qdef.currentText()
         self.config.includes_quality_defs = self.act1_widget.get_selected_by_type("quality-definition")
         self.config.includes_profiles = self.act1_widget.get_selected_by_type("quality-profiles")
         self.config.includes_cfs = self.act1_widget.get_selected_by_type("custom-formats")
-        
-        # 3. Profiles
         self.config.custom_profiles = self.act2_widget.get_profiles()
-             
-        # 4. CFs
         self.config.active_cfs = list(self.act3_widget.active_assignments.values())
-        
         return self.config
 
 class MainWindow(QMainWindow):

@@ -618,11 +618,8 @@ class QualityProfileManager(QWidget):
         """Helper to parse list of dicts into QualityProfile objects."""
         for p_data in profiles_data:
             name = p_data.get("name", "Imported Profile")
-            profile = QualityProfile(name=name, source=source)
-            
-            # Load metadata if present (extended config)
-            # YAML format: usage of 'upgrade', 'reset_unmatched_scores', etc.
-            # Check for nested keys
+            trash_id = p_data.get("trash_id", "")
+            profile = QualityProfile(name=name, trash_id=trash_id, source=source)
             
             # Reset Unmatched Scores
             rus = p_data.get("reset_unmatched_scores")
@@ -631,31 +628,49 @@ class QualityProfileManager(QWidget):
             elif isinstance(rus, bool):
                 profile.reset_unmatched_scores = rus
                 
-            # Upgrade
+            # Upgrade settings
             upg = p_data.get("upgrade", {})
-            if isinstance(upg, dict):
+            if isinstance(upg, dict) and upg:
                 profile.upgrade_allowed = upg.get("allowed", False)
                 profile.upgrade_until = upg.get("until_quality", "")
                 profile.until_score = upg.get("until_score", 10000)
+            elif "upgradeAllowed" in p_data:
+                profile.upgrade_allowed = p_data.get("upgradeAllowed", False)
+                profile.upgrade_until = p_data.get("cutoff", "")
+                profile.until_score = p_data.get("cutoffFormatScore", 10000)
                 
             profile.min_format_score = p_data.get("min_format_score", 0)
-            profile.score_set = p_data.get("score_set", "")
+            profile.score_set = p_data.get("score_set") or p_data.get("trash_score_set", "")
             profile.quality_sort = p_data.get("quality_sort", "top")
-            # Custom profiles (from YAML) are active by default, Includes (Templates) are inactive
+            
+            # Custom profiles (from YAML) are active by default, Includes (Templates) are inactive by default
             default_active = (source == "custom")
             profile.active = p_data.get("active", default_active)
             
             # Load Qualities Structure
             qualities = p_data.get("qualities", [])
             items = []
-            for q_entry in qualities:
-                 # Entry can be dict (group/quality) or string (quality)
-                 if isinstance(q_entry, str):
-                     items.append(QualityProfileItem(name=q_entry))
-                 elif isinstance(q_entry, dict):
-                     q_name = q_entry.get("name", "Unknown")
-                     q_sub = q_entry.get("qualities", [])
-                     items.append(QualityProfileItem(name=q_name, qualities=q_sub))
+            if qualities:
+                for q_entry in qualities:
+                    if isinstance(q_entry, str):
+                        items.append(QualityProfileItem(name=q_entry))
+                    elif isinstance(q_entry, dict):
+                        q_name = q_entry.get("name", "Unknown")
+                        q_sub = q_entry.get("qualities", [])
+                        items.append(QualityProfileItem(name=q_name, qualities=q_sub))
+            elif "items" in p_data:
+                # Parse from TRaSH Guides JSON structure
+                for q_item in p_data.get("items", []):
+                    if isinstance(q_item, dict):
+                        if not q_item.get("allowed", True):
+                            continue
+                        sub_qualities = q_item.get("items", [])
+                        if sub_qualities:
+                            items.append(QualityProfileItem(name=q_item.get("name", "Unknown"), qualities=sub_qualities))
+                        else:
+                            items.append(QualityProfileItem(name=q_item.get("name", "Unknown")))
+                    elif isinstance(q_item, str):
+                        items.append(QualityProfileItem(name=q_item))
             
             profile.items = items
             self.profiles.append(profile)

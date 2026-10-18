@@ -11,6 +11,7 @@ class QualityProfileItem:
 class QualityProfile:
     """Représente un profil complet (ex: FR-MULTi-VF-UHD)"""
     name: str = "New Profile"
+    trash_id: str = "" # Identifiant TRaSH Guides (ex: 500ecc23572575511fd81893777d1e06)
     upgrade_allowed: bool = False
     upgrade_until: str = ""
     until_score: int = 10000
@@ -19,7 +20,7 @@ class QualityProfile:
     quality_sort: str = "top"
     reset_unmatched_scores: bool = True
     items: List[QualityProfileItem] = field(default_factory=list) # La structure arborescente
-    source: str = "custom" # "custom" or "include"
+    source: str = "custom" # "custom", "include", ou "guide"
     active: bool = False
 
 @dataclass
@@ -40,8 +41,8 @@ class InstanceConfig:
     name: str              # ex: fr-films
     base_url: str
     api_key: str
+    quality_definition_type: str = "movie" # movie, anime, ou series
     delete_old_custom_formats: bool = True
-    replace_existing_custom_formats: bool = True
     # Les includes granulaires
     includes_quality_defs: List[str] = field(default_factory=list)
     includes_profiles: List[str] = field(default_factory=list)

@@ -39,16 +39,19 @@ Each instance is configured in **4 Acts**:
 This is where you define the foundation of your instance.
 *   **Instance Name**: Give it a unique name (e.g., `radarr-uhd`).
 *   **Connection**: Right-click on the tab to enter your server's URL and API Key.
-*   **Templates**: Select a base model (e.g., `radarr-quality-definition-movie`).
+*   **Quality Definition Type**: Choose between `movie` / `anime` (for Radarr) or `series` / `anime` (for Sonarr).
+*   **Templates**: Select a base model (e.g., `french-vostfr-hd-bluray-web`, `hd-bluray-web`) or work in manual Custom mode.
 
-### 👯 Act 2: The Casting (Includes)
-Select the ingredients for your configuration.
-*   **Include Tree**: Check the *Quality Definitions* and *Custom Formats* (Trash IDs) you want to include.
-*   **Visualization**: The tree hierarchically displays all files available from the templates.
+### 👯 Act 2: The Casting (TRaSH Guides & Includes)
+Select the ingredients for your configuration directly from TRaSH Guides:
+*   **Quality Definitions**: Predefined sizes for movie/series/anime.
+*   **Quality Profiles**: Official Guide-Backed profiles from TRaSH Guides (e.g., `[French MULTi.VF] HD Bluray + WEB`).
+*   **Format Packs**: TRaSH Guides Custom Format groups (HDR, Audio, etc.).
 
 ### 🎬 Act 3: Staging (Quality Profiles)
 Create and customize your Quality Profiles.
-*   **New Profile**: Give it a name and build your list.
+*   **Guide-Backed Profiles**: Retain their TRaSH ID (`trash_id`) so Recyclarr automatically syncs upstream recommendations.
+*   **New Profile**: Create custom profiles from scratch with custom qualities.
 *   **Drag & Drop**: Build your profile by dragging qualities from the right list to the left tree.
 *   **Grouping**: Select multiple qualities and Right-Click > "Group" to create a custom group (e.g., `HD-1080p`).
 *   **Safety**: Individual qualities cannot be nested inside each other; only folders (groups) allow children.
@@ -58,8 +61,8 @@ The advanced editor for Custom Formats.
 *   **Clear Visualization**: Filterable list of all formats loaded for the instance.
 *   **Detailed Configuration**: 
     *   **Description**: Scrollable text area to read full format details.
-    *   **Score Table**: Assign specific scores for each quality profile.
-    *   **Smart Inference**: The app automatically detects relevant scores (e.g., `VOSTFR` -> `1000`) based on profile names.
+    *   **Score Table**: Assign specific scores for each quality profile via `assign_scores_to`.
+    *   **Smart Inference**: The app automatically detects relevant scores (e.g., `VOSTFR` -> `1000`) based on profile names and TRaSH Guides score sets.
     *   **YAML Comments**: Names of chosen formats will be added as comments in your final file!
 
 ---
