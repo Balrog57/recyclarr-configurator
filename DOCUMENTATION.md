@@ -10,6 +10,12 @@ A modern Python and PySide6 application to easily create and manage your `recycl
 *   **Python 3.8+** installed on your machine.
 *   **pip** (Python package manager).
 
+### Portable version (Windows, no Python needed)
+Download `RecyclarrConfigurator.exe` from the [Releases](https://github.com/Balrog57/recyclarr-configurator/releases) page and put it in any folder you can write to (USB key included). Nothing is installed:
+*   TRaSH data is refreshed at startup into a `data/` folder **next to the .exe**.
+*   Offline first launch: the data bundled in the .exe at release time is used.
+*   **Generate YAML** asks where to save, defaulting to `recyclarr.yml` next to the .exe.
+
 ### 1. Clone or Download
 Download the project source files into a folder on your computer.
 
@@ -75,7 +81,7 @@ The advanced editor for Custom Formats.
 *   **+ Add**: Create a new instance (Radarr or Sonarr).
 *   **Delete**: Remove the current instance (tab).
 *   **Load YAML**: Import an existing `config.yml` (or `.yaml`) to edit your current instances.
-*   **Generate YAML**: The final goal! Click to generate the complete `recyclarr.yml` file.
+*   **Generate YAML**: The final goal! Choose where to save the complete `recyclarr.yml` file (Recyclarr v8 format).
 
 ---
 
@@ -88,5 +94,5 @@ The advanced editor for Custom Formats.
 ---
 
 ## 🆘 Troubleshooting
-*   **Crash at startup?** Check your internet connection for the initial data update.
+*   **Crash at startup?** Check your internet connection for the initial data update (the portable .exe falls back to its bundled data).
 *   **Profiles overlapping?** Use groups to bundle qualities, otherwise they will remain as individual items.

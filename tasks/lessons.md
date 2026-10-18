@@ -15,3 +15,6 @@
 - **Options supprimées en v8** : `replace_existing_custom_formats` n'existe plus (le schéma v8 rejette la config). Les `include: - template:` officiels n'existent plus non plus : les packs CF s'écrivent `custom_format_groups: add: - trash_id: ...`.
 - **Validation** : valider le YAML généré contre `https://schemas.recyclarr.dev/v8/config-schema.json` (les qualités doivent être des objets `- name: X`, jamais des chaînes).
 - **Tests UI** : simuler aussi les changements d'onglets (l'Acte 3 resynchronise les profils) — un test qui ne fait que choisir un template rate ce genre de régression.
+- **CF groups `add`** : sans `assign_scores_to`, un groupe n'applique ses scores qu'aux profils de sa liste `include` (silencieusement ignoré sinon). Les groupes FR (« French Anime », « Release Groups French ») n'incluent que « Base Profile » et n'ont aucun CF required/default : il faut `select_all: true` + `assign_scores_to`.
+- **Comparer des profils** : `tests/recyclarr_sim.py` simule la résolution Recyclarr (profil guide + groupes + overrides) ; comparer le profil effectif, pas le YAML.
+- **Portable (PyInstaller onefile)** : `Path(__file__)` pointe dans `_MEIPASS` (effacé à la fermeture). Écrire à côté de `sys.executable` (`core/paths.py`) et résoudre les chemins au chargement, pas à l'instanciation.

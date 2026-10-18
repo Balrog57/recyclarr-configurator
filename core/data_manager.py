@@ -3,16 +3,17 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from core.paths import data_file
+
 logger = logging.getLogger(__name__)
 
 class DataManager:
     """Manages JSON data (custom formats and templates/profiles)."""
 
-    def __init__(self, custom_formats_path: str = "data/custom_formats.json",
-                 templates_path: str = "data/templates.json"):
-        root_path = Path(__file__).resolve().parent.parent
-        self.custom_formats_path = root_path / custom_formats_path
-        self.templates_path = root_path / templates_path
+    def __init__(self, custom_formats_file: str = "custom_formats.json",
+                 templates_file: str = "templates.json"):
+        self.custom_formats_file = custom_formats_file
+        self.templates_file = templates_file
         
         self.custom_formats: Dict[str, Any] = {}
         self.templates: Dict[str, Any] = {}
@@ -26,6 +27,9 @@ class DataManager:
 
     def load_data(self) -> bool:
         """Loads JSON data from disk and indexes all entities."""
+        # Resolved at load time: the startup sync may just have written fresh files next to the app
+        self.custom_formats_path = data_file(self.custom_formats_file)
+        self.templates_path = data_file(self.templates_file)
         try:
             # 1. Load custom_formats.json
             if self.custom_formats_path.exists():

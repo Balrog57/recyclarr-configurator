@@ -44,8 +44,17 @@ TIERS = {
 
 # TRaSH French anime recipe: [Anime] profile + french-anime score set + French anime release groups
 ANIME_PROFILE = {"radarr": "722b624f9af1e492284c4bc842153a38", "sonarr": "20e0fc959f1f1704bed501f23bdae76f"}
-ANIME_FRENCH_GROUP = {"radarr": "24c8342b620f7a229448ac2f51720e69", "sonarr": "cb745c70bc9ea2ae49b72cfeed17cfd2"}
-FR_SCENE = {"radarr": "0d94489c0d5828cd3bf9409d309fb32b", "sonarr": "2f3422339d185eb227a324644a2fbfca"}
+# Their CFs have no required/default flag and the groups only include TRaSH's "Base Profile":
+# they need select_all + an explicit assign_scores_to, or Recyclarr silently skips them.
+ANIME_GROUPS = {
+    "radarr": ["24c8342b620f7a229448ac2f51720e69", "12a919c8a5e2342db6e9c0b4e3c0756e"],  # French Anime, French release groups
+    "sonarr": ["cb745c70bc9ea2ae49b72cfeed17cfd2", "9fa0bf3c8f8f00154431c3323a29eef2"],
+}
+# Kept from the former (v7) French anime template: MULTi (renaming), BR-DISK, FastSUB
+ANIME_EXTRA_CFS = {
+    "radarr": ["4b900e171accbfb172729b63323ea8ca", "ed38b889b31be83fda192888e2286d83", "7f9b93f82b7e996391525f2be1d891e0"],
+    "sonarr": ["7ba05c6e0e14e793538174c679126996", "85c61753df5da1fb2aab6f2a47426b09", "ea0bb4b6ba388992fad1092703b5ff7b"],
+}
 
 LANGUAGE_CFS = {
     "radarr": {"orig_french": "0542a48746585dc4444bbbb8a6bdf6ea", "not_original": "d6e9318c875905d6cfb5bee961afcea9",
@@ -82,13 +91,11 @@ def language_cf_scores(ranking: list) -> dict:
 
 def build_quick_profile(data_manager, app: str, anime: bool, tier: str, ranking: list,
                         accept_x265: bool = False, accept_av1: bool = False) -> dict:
-    """Returns {qdef, profile_trash_id, profile_name, score_set, cf_groups, custom_formats (YAML-shaped)}."""
+    """Returns {qdef, profile_trash_id, profile_name, score_set, cf_groups {id: options}, custom_formats (YAML-shaped)}."""
     top = ranking[0] if ranking else None
-    groups = []
     if anime:
         profile_id = ANIME_PROFILE[app]
         score_set = "french-anime-vostfr" if top in ("vostfr", "vo") else "french-anime-multi"
-        groups.append(ANIME_FRENCH_GROUP[app])
         qdef = "anime"
     else:
         variant = "vostfr" if top in ("vostfr", "vo") else ("multi-vf" if "vf" in ranking else "multi-vo")
@@ -100,14 +107,14 @@ def build_quick_profile(data_manager, app: str, anime: bool, tier: str, ranking:
     if not guide_qp:
         raise ValueError(f"Profil TRaSH introuvable ({profile_id}) : mettez les données à jour")
     profile_name = guide_qp["name"]
+    groups = {gid: {"select_all": True, "assign_scores_to": [{"name": profile_name}]} for gid in ANIME_GROUPS[app]} if anime else {}
     effective_set = score_set or guide_qp.get("score_set") or "default"
 
     scores = {LANGUAGE_CFS[app][key]: s for key, s in language_cf_scores(ranking).items()}
     if anime:
-        # TRaSH: French scene groups should always be added for anime
-        cf = data_manager.get_cf_by_id(FR_SCENE[app]) or {}
-        trash_scores = cf.get("trash_scores") or {}
-        scores[FR_SCENE[app]] = trash_scores.get(effective_set, trash_scores.get("default", 0))
+        for tid in ANIME_EXTRA_CFS[app]:
+            trash_scores = (data_manager.get_cf_by_id(tid) or {}).get("trash_scores") or {}
+            scores[tid] = trash_scores.get(effective_set, trash_scores.get("default", 0))
     for codec, accepted in (("x265", accept_x265), ("av1", accept_av1)):
         if accepted:
             scores.update({tid: 0 for tid in CODEC_CFS[app][codec]})

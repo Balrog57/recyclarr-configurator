@@ -85,7 +85,7 @@ class YAMLGenerator:
         # 3. Custom Format Groups (v8 replaces the removed official include templates)
         if instance.includes_cfs:
             config["custom_format_groups"] = CommentedMap({
-                "add": [CommentedMap({"trash_id": tid}) for tid in instance.includes_cfs]
+                "add": [CommentedMap({"trash_id": tid, **instance.cf_group_options.get(tid, {})}) for tid in instance.includes_cfs]
             })
 
         # 4. Quality Profiles (TRaSH Guides guide-backed and/or custom)

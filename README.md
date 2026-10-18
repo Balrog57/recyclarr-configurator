@@ -23,6 +23,8 @@ This revised version brings a complete overhaul of the user experience, structur
 
 *   **🎨 "Dark Cinema" Interface**: Immersive and responsive dark theme.
 *   **📱 Multi-Instance Management**: Dynamic tabs to manage Radarr 4K, Radarr 1080p, Sonarr, etc.
+*   **⚡ Quick Wizard**: Language order (MULTi > VF > VOSTFR…), quality and codecs (x265, AV1) in a few clicks, on top of TRaSH Guides profiles (Recyclarr v8).
+*   **💼 Portable**: Single `.exe`, data kept next to it, works from any folder.
 *   **🔄 Auto Sync**: Automatically downloads the latest TRaSH Guides data at startup.
 *   **📂 Import Configuration**: Load existing YAML files to modify your setup.
 *   **🧠 Smart Score Inference**: Intelligent score assignment for custom formats (detects aliases like "french" -> "fr").

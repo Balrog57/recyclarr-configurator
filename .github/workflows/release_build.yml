@@ -28,6 +28,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Fetch TRaSH data (bundled as offline fallback)
+        run: |
+          python utils/templates_extractor.py -o data/templates.json --token ${{ secrets.GITHUB_TOKEN }}
+          python utils/trash_cf_extractor.py -o data/custom_formats.json --token ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Application (PyInstaller OneFile)
         run: |
           pyinstaller recyclarr-config.spec --clean

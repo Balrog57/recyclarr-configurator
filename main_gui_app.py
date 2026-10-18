@@ -23,6 +23,7 @@ from ui.widgets.profile_builder import QualityProfileManager
 from ui.widgets.cf_editor import CFEditor
 from ui.widgets.quick_profile_dialog import QuickProfileDialog
 from core.quick_profile import build_quick_profile
+from core.paths import app_dir
 from PySide6.QtWidgets import (QProgressDialog, QDialog, QRadioButton, QButtonGroup, 
                                QDialogButtonBox, QLineEdit, QMessageBox, QWidget,
                                QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
@@ -189,6 +190,7 @@ class InstanceEditor(QWidget):
     def on_template_changed(self, index):
         """Loads template data into other tabs."""
         self.act3_widget.active_assignments.clear()
+        self.config.cf_group_options = {}
 
         if index == 0:
             # Custom/Manuel: Clear everything to start fresh
@@ -271,6 +273,7 @@ class InstanceEditor(QWidget):
         if plan["score_set"]:
             profile["score_set"] = plan["score_set"]
         self.act2_widget.load_profiles([profile])
+        self.config.cf_group_options = plan["cf_groups"]
         self.act1_widget.set_selected_includes([plan["profile_trash_id"], *plan["cf_groups"]])
         self.act3_widget.load_assignments_from_template(plan["custom_formats"], clear_existing=True)
 
@@ -375,6 +378,9 @@ class InstanceEditor(QWidget):
                 include_ids.append(inc["template"])
         include_ids += [qp["trash_id"] for qp in data.get("quality_profiles") or [] if isinstance(qp, dict) and "trash_id" in qp]
         include_ids += self._cf_group_ids(data)
+        groups_add = (data.get("custom_format_groups") or {}).get("add") or []
+        self.config.cf_group_options = {g["trash_id"]: {k: v for k, v in g.items() if k != "trash_id"}
+                                        for g in groups_add if isinstance(g, dict) and len(g) > 1}
         self.act1_widget.set_selected_includes(include_ids)
         
         # Quality Profiles (Resolve guide-backed profiles if only trash_id is present)
@@ -696,10 +702,15 @@ class MainWindow(QMainWindow):
             sonarr_instances=sonarr_instances
         )
         
-        # Generate
+        # Portable: let the user pick the file, defaulting next to the app (not the shortcut's cwd)
+        target, _ = QFileDialog.getSaveFileName(self, "Save Recyclarr Configuration",
+                                                str(app_dir() / "recyclarr.yml"), "YAML Files (*.yml *.yaml)")
+        if not target:
+            return
+
         generator = YAMLGenerator()
         try:
-            path = generator.generate_config(full_config)
+            path = generator.generate_config(full_config, filename=target)
             QMessageBox.information(self, "Success", f"File generated:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

@@ -1,7 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
+import os
+
 datas = [('assets', 'assets')]
+# Offline fallback for the first launch: TRaSH data fetched at build time (see release workflow)
+if os.path.isdir('data'):
+    datas.append(('data', 'data'))
 binaries = []
 hiddenimports = []
 

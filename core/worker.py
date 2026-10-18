@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
+from core.paths import data_dir
+
 # Add parent directory to sys.path to allow importing scripts from root
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -84,11 +86,10 @@ class SyncWorker(QThread):
     def _save_json(self, data, filename):
         """Helper to save JSON data to disk."""
         try:
-            # Resolve to 'data' directory relative to project root
-            root_path = Path(__file__).resolve().parent.parent
-            data_dir = root_path / "data"
-            data_dir.mkdir(exist_ok=True) # Ensure data dir exists
-            file_path = data_dir / filename
+            # Next to the .exe when portable, so updates survive restarts
+            target_dir = data_dir()
+            target_dir.mkdir(exist_ok=True)
+            file_path = target_dir / filename
             
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)

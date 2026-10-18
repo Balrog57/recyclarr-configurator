@@ -47,6 +47,8 @@ class InstanceConfig:
     includes_quality_defs: List[str] = field(default_factory=list)
     includes_profiles: List[str] = field(default_factory=list)
     includes_cfs: List[str] = field(default_factory=list)
+    # Extra keys per CF group in custom_format_groups.add (select_all, select, exclude, assign_scores_to)
+    cf_group_options: Dict[str, dict] = field(default_factory=dict)
     # Les créations manuelles
     custom_profiles: List[QualityProfile] = field(default_factory=list)
     active_cfs: List[CustomFormatAssignment] = field(default_factory=list)
