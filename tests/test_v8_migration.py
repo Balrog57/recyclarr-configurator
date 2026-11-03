@@ -522,7 +522,7 @@ def window(data_manager, monkeypatch, tmp_path):
 def test_generate_leaves_untouched_tabs_out(window):
     win, target, messages, _ = window
     win.generate_yaml()
-    assert not target.exists() and "Pick a profile" in messages[0]
+    assert not target.exists() and "Choisissez d'abord un profil" in messages[0]
 
     radarr = win.tabs.widget(0)
     radarr.edit_key.setText("key")
@@ -543,9 +543,29 @@ def test_generate_warns_about_what_recyclarr_refuses(window, monkeypatch):
     asked = []
     monkeypatch.setattr(module.QMessageBox, "question", lambda _p, _t, text, _b: asked.append(text) or module.QMessageBox.No)
     win.generate_yaml()
-    assert "API key is missing" in asked[0] and not target.exists()
+    assert "la clé d'API manque" in asked[0] and not target.exists()
 
 
 def test_connection_fields_follow_a_loaded_yaml(data_manager):
     editor, _ = _yaml_cycle(data_manager, {"base_url": "http://r:1", "api_key": "abc", "quality_profiles": [{"trash_id": HD_BLURAY}]})
     assert editor.edit_url.text() == "http://r:1" and editor.edit_key.text() == "abc"
+
+
+def test_profiles_sorted_under_trash_groups(data_manager, monkeypatch):
+    from PySide6.QtWidgets import QApplication
+    from ui.widgets.include_tree import IncludeTreeWidget
+
+    QApplication.instance() or QApplication([])
+    groups = [{"name": "Standard", "profiles": {"hd-bluray-web": HD_BLURAY}}, {"name": "French", "profiles": {}}, {"name": "TEST", "profiles": {"x": "unknown"}}]
+    monkeypatch.setattr(data_manager, "get_profile_groups", lambda app: groups)
+    tree = IncludeTreeWidget(data_manager)
+    tree.load_for_app("radarr")
+    nodes = [tree.root_profiles.child(i) for i in range(tree.root_profiles.childCount())]
+    # Empty groups are hidden, profiles TRaSH left out of its groups still show
+    total = len(data_manager.get_quality_profiles_for_app("radarr"))
+    assert [n.text(0) for n in nodes] == ["Standard (1)", f"Autres ({total - 1})"]
+
+    # A checked profile is never hidden in a closed group, and is still found
+    assert not nodes[0].isExpanded()
+    tree.set_selected_includes([HD_BLURAY])
+    assert nodes[0].isExpanded() and tree.get_selected_by_type("quality-profiles") == [HD_BLURAY]

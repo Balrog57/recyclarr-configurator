@@ -28,7 +28,7 @@ class QuickProfileDialog(QDialog):
         layout.addRow("Contenu :", self.combo_content)
 
         self.combo_tier = QComboBox()
-        layout.addRow("Qualité (profils TRaSH) :", self.combo_tier)
+        layout.addRow("Qualité :", self.combo_tier)
 
         # Language order: check to accept, drag (or buttons) to reorder
         self.list_lang = QListWidget()

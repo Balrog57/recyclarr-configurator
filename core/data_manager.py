@@ -145,6 +145,10 @@ class DataManager:
         """Retrieves all guide-backed quality profiles for an app."""
         return self.get_includes_by_type(app, "quality-profiles")
 
+    def get_profile_groups(self, app: str) -> List[Dict]:
+        """TRaSH profile groups: [{name, profiles: {file stem: trash_id}}]; empty with older data files."""
+        return self.templates.get(app, {}).get("quality-profile-groups", [])
+
     def get_quality_profile_by_id(self, trash_id: str) -> Optional[Dict]:
         """Retrieves a quality profile by its trash_id."""
         return self.profiles_by_id.get(trash_id)

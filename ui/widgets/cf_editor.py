@@ -22,11 +22,11 @@ class CFEditor(QWidget):
         layout = QVBoxLayout(self)
         
         # Header
-        header_lbl = QLabel("Act 4: Special Effects")
+        header_lbl = QLabel("Étape 4 : scores (facultatif)")
         header_lbl.setProperty("class", "h2")
         layout.addWidget(header_lbl)
         
-        desc_lbl = QLabel("Bold = synced by TRaSH Guides in your profiles (guide score shown). Check a profile to override its score.")
+        desc_lbl = QLabel("Plus le score d'un critère est haut, plus la version est préférée. En gras : critères déjà appliqués par TRaSH. Cochez un profil pour changer son score.")
         desc_lbl.setWordWrap(True)
         desc_lbl.setStyleSheet("color: #888; margin-bottom: 10px;")
         layout.addWidget(desc_lbl)
@@ -39,7 +39,7 @@ class CFEditor(QWidget):
         
         # Search Bar
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search for a format...")
+        self.search_input.setPlaceholderText("Rechercher un critère…")
         self.search_input.textChanged.connect(self.filter_list)
         left_layout.addWidget(self.search_input)
         
@@ -52,10 +52,10 @@ class CFEditor(QWidget):
         content_layout.addLayout(left_layout, 1)
         
         # 2. Right Panel (Inspector)
-        self.details_panel = QGroupBox("Format Configuration")
+        self.details_panel = QGroupBox("Détail du critère")
         details_layout = QVBoxLayout()
         # Details Panel
-        self.lbl_name = QLabel("Format Name")
+        self.lbl_name = QLabel("Nom du critère")
         self.lbl_name.setProperty("class", "h4")
         details_layout.addWidget(self.lbl_name)
         
@@ -65,18 +65,18 @@ class CFEditor(QWidget):
         details_layout.addWidget(self.desc_text, 1) # Stretch 1/3
 
         # Default Score Display
-        self.lbl_default_score = QLabel("(Default Score: 0)")
+        self.lbl_default_score = QLabel("(Score par défaut : 0)")
         self.lbl_default_score.setStyleSheet("color: #666; font-weight: bold; margin-top: 5px;")
         details_layout.addWidget(self.lbl_default_score)
 
         details_layout.addSpacing(10)
-        details_layout.addWidget(QLabel("Score per Profile:"))
+        details_layout.addWidget(QLabel("Score par profil :"))
 
         # Table for Profile Assignments
         # Columns: [Profile Name, Enabled (Checkbox), Score (Spinbox)]
         self.profile_table = QTableWidget()
         self.profile_table.setColumnCount(3)
-        self.profile_table.setHorizontalHeaderLabels(["Profile", "Active", "Score"])
+        self.profile_table.setHorizontalHeaderLabels(["Profil", "Actif", "Score"])
         self.profile_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.profile_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.profile_table.setColumnWidth(1, 60) # Fixed width for Checkbox
@@ -102,7 +102,7 @@ class CFEditor(QWidget):
         for cf in sorted_cfs:
             item = QListWidgetItem(cf.get('name', 'Unknown'))
             item.setData(99, cf.get('trash_id')) 
-            item.setToolTip(cf.get('description', 'No description'))
+            item.setToolTip(cf.get('description', 'Pas de description'))
             self.list_widget.addItem(item)
             
     def filter_list(self, text):
@@ -126,7 +126,7 @@ class CFEditor(QWidget):
         # Default score logic
         trash_scores = cf_data.get('trash_scores', {})
         default_score = trash_scores.get('default', 0) if isinstance(trash_scores, dict) else 0
-        self.lbl_default_score.setText(f"(Default Score: {default_score})")
+        self.lbl_default_score.setText(f"(Score par défaut : {default_score})")
         
         current_assignment = self.active_assignments.get(trash_id)
         

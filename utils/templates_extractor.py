@@ -237,7 +237,16 @@ class ConfigTemplatesExtractor:
         return {
             "templates": self._extract_templates(app),
             "includes": self._extract_includes(app),
+            "quality-profile-groups": self._extract_profile_groups(app),
         }
+
+    def _extract_profile_groups(self, app: str) -> list[dict[str, Any]]:
+        """TRaSH profile groups (Standard, French...): only used to sort profiles, so never fatal."""
+        try:
+            return self.client.get_json_file(f"docs/json/{app}/quality-profile-groups/groups.json")
+        except Exception as e:
+            logger.warning(f"No quality profile groups for {app}: {e}")
+            return []
 
     def _extract_templates(self, app: str) -> list[dict[str, Any]]:
         """Extract templates from recyclarr/config-templates repository."""

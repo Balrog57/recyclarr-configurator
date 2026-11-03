@@ -249,13 +249,13 @@ class QualityProfileTree(QTreeWidget):
     def add_group(self):
         selected_items = self.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Selection Required", "Please select at least one quality to create a group.")
+            QMessageBox.warning(self, "Sélection requise", "Sélectionnez au moins une qualité pour créer un groupe.")
             return
 
         names = [item.text(0) for item in selected_items]
         default_name = "|".join(names)
         
-        name, ok = QInputDialog.getText(self, "New Group", "Group Name:", text=default_name)
+        name, ok = QInputDialog.getText(self, "Nouveau groupe", "Nom du groupe :", text=default_name)
         if ok and name:
             group_item = QTreeWidgetItem([name])
             group_item.setFlags(group_item.flags() | Qt.ItemIsDropEnabled) # Groups CAN have children
@@ -271,7 +271,7 @@ class QualityProfileTree(QTreeWidget):
             self.structure_changed.emit()
             
     def rename_group(self, item):
-        name, ok = QInputDialog.getText(self, "Rename Group", "New Name:", text=item.text(0))
+        name, ok = QInputDialog.getText(self, "Renommer le groupe", "Nouveau nom :", text=item.text(0))
         if ok and name:
             item.setText(0, name)
             self.structure_changed.emit()
@@ -331,9 +331,9 @@ class ProfileEditorDialog(QDialog):
     def __init__(self, parent=None, profile: QualityProfile = None, app_type: str = "radarr"):
         super().__init__(parent)
         self.app_type = app_type
-        self.setWindowTitle("Edit Quality Profile")
+        self.setWindowTitle("Modifier le profil")
         self.resize(1000, 700)
-        self.profile = profile or QualityProfile(name="New Profile")
+        self.profile = profile or QualityProfile(name="Nouveau profil")
         
         self.setup_ui()
         self.load_profile()
@@ -342,51 +342,53 @@ class ProfileEditorDialog(QDialog):
         main_layout = QVBoxLayout(self)
         
         # --- Top Section: Form Data ---
-        form_group = QGroupBox("Configuration")
+        form_group = QGroupBox("Réglages")
         form_layout = QFormLayout(form_group)
         
         # Name
         self.name_edit = QLineEdit()
-        form_layout.addRow("Name:", self.name_edit)
+        form_layout.addRow("Nom :", self.name_edit)
         
         # Reset Unmatched Scores
-        self.reset_scores_chk = QCheckBox("Enable (Reset Unmatched Scores)")
-        self.reset_scores_chk.setToolTip("If enabled, score is reset to 0 for unmatched releases.")
-        form_layout.addRow("Reset Unmatched Scores:", self.reset_scores_chk)
+        self.reset_scores_chk = QCheckBox("Remettre à 0 les scores des critères non listés")
+        self.reset_scores_chk.setToolTip("Recommandé : le profil ne garde que les scores choisis ici.")
+        form_layout.addRow("Scores :", self.reset_scores_chk)
         
         # Upgrade Allowed
-        self.upgrade_chk = QCheckBox("If disabled, qualities will not be upgraded")
-        form_layout.addRow("Upgrades Allowed:", self.upgrade_chk)
+        self.upgrade_chk = QCheckBox("Remplacer un fichier quand une meilleure version sort")
+        form_layout.addRow("Mises à niveau :", self.upgrade_chk)
         
         # Upgrade Until Quality (ComboBox)
         self.upgrade_until_combo = QComboBox()
         self.upgrade_until_combo.setEditable(True) # Allow custom text if needed, but usually strictly from list
-        form_layout.addRow("Upgrade until quality:", self.upgrade_until_combo)
+        form_layout.addRow("Jusqu'à la qualité :", self.upgrade_until_combo)
         
         # Min Format Score
         self.min_score_spin = QSpinBox()
         self.min_score_spin.setRange(-10000, 100000)
-        form_layout.addRow("Minimum custom format score:", self.min_score_spin)
+        self.min_score_spin.setToolTip("Une version sous ce score n'est pas téléchargée.")
+        form_layout.addRow("Score minimum :", self.min_score_spin)
         
         # Until Score
         self.until_score_spin = QSpinBox()
         self.until_score_spin.setRange(0, 1000000)
-        form_layout.addRow("Upgrade until score:", self.until_score_spin)
+        form_layout.addRow("Jusqu'au score :", self.until_score_spin)
         
         # Score Set
         self.score_set_edit = QLineEdit()
-        self.score_set_edit.setPlaceholderText("e.g., french-multi-vf")
-        form_layout.addRow("Score Set:", self.score_set_edit)
+        self.score_set_edit.setPlaceholderText("ex. french-multi-vf (à laisser tel quel en cas de doute)")
+        form_layout.addRow("Jeu de scores TRaSH (avancé) :", self.score_set_edit)
         
         # Quality Sort
         self.sort_combo = QComboBox()
         self.sort_combo.addItems(["top", "bottom"])
-        form_layout.addRow("Quality Sort:", self.sort_combo)
+        self.sort_combo.setToolTip("Place des qualités listées ici : en haut (top) ou en bas (bottom) de la liste du serveur.")
+        form_layout.addRow("Ordre des qualités (avancé) :", self.sort_combo)
         
         main_layout.addWidget(form_group)
         
         # --- Middle Section: Builder ---
-        builder_group = QGroupBox("Profile Structure")
+        builder_group = QGroupBox("Qualités du profil")
         builder_layout = QVBoxLayout(builder_group)
         
         splitter = QSplitter(Qt.Horizontal)
@@ -394,14 +396,14 @@ class ProfileEditorDialog(QDialog):
         # Left: Source
         left_widget = QWidget()
         l_layout = QVBoxLayout(left_widget)
-        l_layout.addWidget(QLabel("Available Qualities"))
+        l_layout.addWidget(QLabel("Qualités disponibles"))
         self.source_list = QualitySourceList(self.app_type)
         l_layout.addWidget(self.source_list)
         
         # Right: Tree
         right_widget = QWidget()
         r_layout = QVBoxLayout(right_widget)
-        r_layout.addWidget(QLabel("Your Profile (Drag & Drop, Right-click to Group)"))
+        r_layout.addWidget(QLabel("Votre profil, de la meilleure à la moins bonne (glisser-déposer, clic droit pour grouper)"))
         self.tree = QualityProfileTree()
         r_layout.addWidget(self.tree)
         
@@ -415,6 +417,10 @@ class ProfileEditorDialog(QDialog):
         splitter.setStretchFactor(1, 2)
         
         builder_layout.addWidget(splitter)
+        if self.profile.trash_id:
+            hint = QLabel("Si vous changez ces qualités, ce profil ne suivra plus TRaSH pour ses qualités.")
+            hint.setStyleSheet("color: #888;")
+            builder_layout.addWidget(hint)
         main_layout.addWidget(builder_group)
         
         # --- Bottom: Buttons ---
@@ -466,7 +472,7 @@ class ProfileEditorDialog(QDialog):
     def save_and_accept(self):
         # Validation
         if not self.name_edit.text().strip():
-            QMessageBox.warning(self, "Error", "Profile name is required.")
+            QMessageBox.warning(self, "Erreur", "Le profil doit avoir un nom.")
             return
 
         self.profile.name = self.name_edit.text().strip()
@@ -505,7 +511,7 @@ class ProfileItemWidget(QWidget):
         self.label = QLabel(f"{profile.name}")
         self.label.setStyleSheet("font-weight: bold; font-size: 13px;")
         
-        self.info_label = QLabel(f"({len(profile.items)} groups/qualities)")
+        self.info_label = QLabel(f"({len(profile.items)} groupes/qualités)")
         self.info_label.setStyleSheet("color: #888; font-size: 11px; margin-left: 5px;")
         
         layout.addWidget(self.label)
@@ -513,7 +519,7 @@ class ProfileItemWidget(QWidget):
         layout.addStretch()
         
         # Activation Checkbox
-        self.checkbox = QCheckBox("Active")
+        self.checkbox = QCheckBox("Actif")
         self.checkbox.setChecked(profile.active)
         # Style to match CF editor checkboxes
         self.checkbox.setStyleSheet("""
@@ -547,25 +553,25 @@ class QualityProfileManager(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         
-        header_lbl = QLabel("Act 3: Staging")
+        header_lbl = QLabel("Étape 3 : réglages des profils")
         header_lbl.setProperty("class", "h2")
         layout.addWidget(header_lbl)
         
-        desc = QLabel("Create and manage your quality profiles.")
+        desc = QLabel("Modifiez un profil, ou créez le vôtre depuis zéro.")
         desc.setStyleSheet("color: #888;")
         layout.addWidget(desc)
         
         # Toolbar
         toolbar = QHBoxLayout()
-        btn_add = QPushButton("New Profile")
+        btn_add = QPushButton("Nouveau profil")
         btn_add.setIcon(QIcon.fromTheme("list-add"))
         btn_add.clicked.connect(self.add_profile)
         btn_add.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold;")
         
-        btn_edit = QPushButton("Modify")
+        btn_edit = QPushButton("Modifier")
         btn_edit.clicked.connect(self.edit_profile)
         
-        btn_del = QPushButton("Delete")
+        btn_del = QPushButton("Supprimer")
         btn_del.clicked.connect(self.delete_profile)
         
         toolbar.addWidget(btn_add)
@@ -611,7 +617,7 @@ class QualityProfileManager(QWidget):
         if row < 0: return
         
         name = self.profiles[row].name
-        if QMessageBox.question(self, "Delete", f"Delete profile '{name}'?", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+        if QMessageBox.question(self, "Supprimer", f"Supprimer le profil « {name} » ?", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
             self.profiles.pop(row)
             self.refresh_list()
             

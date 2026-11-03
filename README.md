@@ -13,11 +13,11 @@ A modern graphical application (PySide6) to generate YAML configuration files fo
 
 ## 🌟 What's New in "Director's Cut"
 
-This revised version brings a complete overhaul of the user experience, structured into **4 Acts** for intuitive configuration:
-*   **Act 1 - The Script**: Base settings and Template selection.
-*   **Act 2 - The Casting**: TRaSH guide-backed profiles and CF groups (auto / add / skip).
-*   **Act 3 - Staging**: Advanced quality profile creation (Drag & Drop, Groups).
-*   **Act 4 - Special Effects**: Custom Format editor showing the guide scores Recyclarr will apply, with per-profile overrides.
+This revised version brings a complete overhaul of the user experience, structured into **4 steps**, in French, for intuitive configuration:
+*   **1. Connexion**: Server URL, API key, quick wizard or official template.
+*   **2. Profils**: TRaSH guide-backed profiles sorted by TRaSH groups, and CF groups.
+*   **3. Réglages**: Quality profile creation (Drag & Drop, Groups).
+*   **4. Scores**: Custom Format editor showing the guide scores Recyclarr will apply, with per-profile overrides.
 
 ## ✨ Features
 

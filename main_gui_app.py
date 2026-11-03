@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QStyle, QProgressDialog, QRadioButton, QButtonGroup,
     QStatusBar, QGroupBox, QComboBox
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTranslator, QLocale, QLibraryInfo
 
 # Core Imports
 from core.data_manager import DataManager
@@ -44,7 +44,7 @@ class InstanceSettingsDialog(QDialog):
     """Dialog to edit Base URL and API Key."""
     def __init__(self, parent=None, base_url="", api_key=""):
         super().__init__(parent)
-        self.setWindowTitle("Connection Settings")
+        self.setWindowTitle("Connexion au serveur")
         self.resize(400, 150)
         layout = QFormLayout(self)
         
@@ -54,8 +54,8 @@ class InstanceSettingsDialog(QDialog):
         self.edit_key = QLineEdit(api_key)
         self.edit_key.setEchoMode(QLineEdit.PasswordEchoOnEdit)
         
-        layout.addRow("Base URL:", self.edit_url)
-        layout.addRow("API Key:", self.edit_key)
+        layout.addRow("Adresse du serveur :", self.edit_url)
+        layout.addRow("Clé d'API :", self.edit_key)
         
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept)
@@ -71,11 +71,11 @@ class CustomTabBar(QTabBar):
         idx = self.tabAt(event.pos())
         if idx >= 0:
             menu = QMenu(self)
-            action_edit = QAction("Edit URL & API Key", self)
+            action_edit = QAction("Modifier l'adresse et la clé d'API", self)
             action_edit.triggered.connect(lambda: self.edit_tab_settings(idx))
             menu.addAction(action_edit)
             
-            action_rename = QAction("Rename", self)
+            action_rename = QAction("Renommer", self)
             action_rename.triggered.connect(lambda: self.rename_tab(idx))
             menu.addAction(action_rename)
             
@@ -94,7 +94,7 @@ class CustomTabBar(QTabBar):
         parent = self.parent()
         if isinstance(parent, QTabWidget):
             old_name = parent.tabText(index)
-            new_name, ok = QInputDialog.getText(self, "Rename", "Instance Name:", text=old_name)
+            new_name, ok = QInputDialog.getText(self, "Renommer", "Nom du serveur :", text=old_name)
             if ok and new_name:
                 parent.setTabText(index, new_name)
                 # Update config name in widget
@@ -128,11 +128,11 @@ class InstanceEditor(QWidget):
         gen_layout = QFormLayout(self.tab_general)
         
         # Header Acte 1
-        header_gen = QLabel("Act 1: The Script")
+        header_gen = QLabel("Étape 1 : connexion et profil de départ")
         header_gen.setProperty("class", "h2")
         gen_layout.addRow(header_gen)
         
-        desc_gen = QLabel("Configure the identity of the instance and its base model.")
+        desc_gen = QLabel("Indiquez où se trouve votre serveur, puis choisissez comment créer votre profil.")
         desc_gen.setStyleSheet("color: #888; margin-bottom: 10px;")
         gen_layout.addRow(desc_gen)
         gen_layout.addRow(QLabel(" ")) # Spacer
@@ -141,57 +141,66 @@ class InstanceEditor(QWidget):
         self.edit_url = QLineEdit()
         self.edit_url.setPlaceholderText("http://localhost:8989" if self.app_type == "sonarr" else "http://localhost:7878")
         self.edit_url.textEdited.connect(lambda text: setattr(self.config, "base_url", text.strip()))
-        gen_layout.addRow("Server URL:", self.edit_url)
+        gen_layout.addRow("Adresse du serveur :", self.edit_url)
 
         self.edit_key = QLineEdit()
         self.edit_key.setEchoMode(QLineEdit.PasswordEchoOnEdit)
-        self.edit_key.setPlaceholderText(f"In {self.app_type.capitalize()}: Settings > General > API Key")
+        self.edit_key.setPlaceholderText(f"Dans {self.app_type.capitalize()} : Settings > General > API Key")
         self.edit_key.textEdited.connect(lambda text: setattr(self.config, "api_key", text.strip()))
-        gen_layout.addRow("API Key:", self.edit_key)
+        gen_layout.addRow("Clé d'API :", self.edit_key)
         
         gen_layout.addRow(QLabel(" ")) # Spacer
         
+        # 1.4 Quick wizard first: the simplest way to get a working profile
+        hint_quick = QLabel("Le plus simple : l'assistant crée votre profil en quelques clics.")
+        hint_quick.setStyleSheet("color: #888;")
+        gen_layout.addRow(hint_quick)
+        self.btn_quick = QPushButton("⚡ Assistant rapide (langues, qualité, codecs)…")
+        self.btn_quick.clicked.connect(self.open_quick_wizard)
+        gen_layout.addRow(self.btn_quick)
+
+        hint_model = QLabel("Ou partez d'un modèle officiel, puis ajustez-le dans les onglets suivants :")
+        hint_model.setStyleSheet("color: #888; margin-top: 10px;")
+        gen_layout.addRow(hint_model)
+
         # 1.2 Quality Definition (types detected from TRaSH quality-size files)
         self.combo_qdef = QComboBox()
         qdef_types = {(q.get("content") or {}).get("type") or q.get("name")
                       for q in self.data_manager.get_includes_by_type(self.app_type, "quality-definitions")}
         default_type = QDEF[self.app_type]
         self.combo_qdef.addItems(sorted(qdef_types | {default_type}, key=lambda t: (t != default_type, t)))
-        gen_layout.addRow("Quality Definition Type:", self.combo_qdef)
+        self.combo_qdef.setToolTip("Tailles minimum et maximum des fichiers recommandées par TRaSH pour ce type de contenu.")
+        gen_layout.addRow("Tailles de fichiers :", self.combo_qdef)
         
         # 1.3 Template / Mode
         self.combo_mode = QComboBox()
-        self.combo_mode.addItem("Custom (Manual)")
+        self.combo_mode.addItem("Aucun (je choisis moi-même)")
         
         # Load templates from DataManager
         templates = self.data_manager.get_templates_for_app(self.app_type)
         for t in templates:
             self.combo_mode.addItem(t.get("name", "Unnamed"), t)
             
-        gen_layout.addRow("Profile Model:", self.combo_mode)
+        gen_layout.addRow("Modèle officiel :", self.combo_mode)
         self.combo_mode.currentIndexChanged.connect(self.on_template_changed)
 
-        # 1.4 Quick wizard: language order / codecs on top of TRaSH profiles
-        self.btn_quick = QPushButton("⚡ Assistant rapide (langues, qualité, codecs)…")
-        self.btn_quick.clicked.connect(self.open_quick_wizard)
-        gen_layout.addRow(self.btn_quick)
         
-        self.tabs.addTab(self.tab_general, "Act 1: Script")
+        self.tabs.addTab(self.tab_general, "1. Connexion")
         
         # --- TAB 2: INCLUDES (Casting) ---
         self.act1_widget = IncludeTreeWidget(self.data_manager)
         self.act1_widget.load_for_app(self.app_type)
         self.act1_widget.selection_changed.connect(self._on_casting_changed) 
-        self.tabs.addTab(self.act1_widget, "Act 2: Casting")
+        self.tabs.addTab(self.act1_widget, "2. Profils")
         
         # --- TAB 3: QUALITY PROFILES (Mise en Scène) ---
         self.act2_widget = QualityProfileManager(self.app_type)
-        self.tabs.addTab(self.act2_widget, "Act 3: Staging")
+        self.tabs.addTab(self.act2_widget, "3. Réglages")
         
         # --- TAB 4: CUSTOM FORMATS (Effets Spéciaux) ---
         cfs_data = self.data_manager.get_custom_formats_for_app(self.app_type)
         self.act3_widget = CFEditor(cfs_data, available_profiles=[]) 
-        self.tabs.addTab(self.act3_widget, "Act 4: Special Effects")
+        self.tabs.addTab(self.act3_widget, "4. Scores")
         
         # Connect Tabs
         self.tabs.currentChanged.connect(self.on_tab_changed)
@@ -232,7 +241,7 @@ class InstanceEditor(QWidget):
     def apply_quick_profile(self, anime, tier, ranking, accepted=()):
         """Replaces the instance setup with a TRaSH profile tuned to the given preferences."""
         plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, ranking, accepted)
-        # Custom (Manual) mode, cleared even if it was already selected
+        # "Aucun" mode, cleared even if it was already selected
         self.combo_mode.blockSignals(True)
         self.combo_mode.setCurrentIndex(0)
         self.combo_mode.blockSignals(False)
@@ -290,7 +299,7 @@ class InstanceEditor(QWidget):
             self.config.base_url = url
             self.config.api_key = key
             self._refresh_connection_fields()
-            QMessageBox.information(self, "Instance Updated", f"Settings for {self.config.name} saved.")
+            QMessageBox.information(self, "Serveur modifié", f"Réglages de {self.config.name} enregistrés.")
 
     def _refresh_connection_fields(self):
         # str(): a YAML can hold !secret / !env_var values, kept in the config unless the field is edited
@@ -414,17 +423,17 @@ class InstanceEditor(QWidget):
         config = self.get_config()
         found = []
         if not config.api_key:
-            found.append(f"{config.name}: the API key is missing (Act 1).")
+            found.append(f"{config.name} : la clé d'API manque (étape 1).")
         instance = YAMLGenerator()._generate_instance_config(config, default_qdef=QDEF[self.app_type])
         for name, minimum, total in unreachable_min_scores(instance, self.app_type, self.data_manager):
-            found.append(f"{config.name}: Recyclarr will refuse profile '{name}': its minimum score ({minimum}) "
-                         f"is above the total of its positive scores ({total}).")
+            found.append(f"{config.name} : Recyclarr refusera le profil « {name} » : son score minimum ({minimum}) "
+                         f"dépasse le total de ses scores positifs ({total}).")
         return found
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Recyclarr Configurator - Director's Cut")
+        self.setWindowTitle("Recyclarr Configurator")
         self.resize(1200, 800)
         
         # Data Manager
@@ -436,12 +445,12 @@ class MainWindow(QMainWindow):
         else:
              # Direct Load
             if not self.data_manager.load_data():
-                QMessageBox.critical(self, "Error", "Unable to load data files (json).")
+                QMessageBox.critical(self, "Erreur", "Impossible de charger les données TRaSH (fichiers json).")
             self.setup_ui()
 
     def start_initial_sync(self):
         """Starts the background worker to update data."""
-        self.progress_dialog = QProgressDialog("Updating data (GitHub)...", "Cancel", 0, 0, self)
+        self.progress_dialog = QProgressDialog("Mise à jour des données TRaSH (GitHub)…", "Annuler", 0, 0, self)
         self.progress_dialog.setWindowModality(Qt.WindowModal)
         self.progress_dialog.setMinimumDuration(0)
         
@@ -459,18 +468,18 @@ class MainWindow(QMainWindow):
     def on_sync_finished(self):
         self.progress_dialog.cancel()
         if not self.data_manager.load_data():
-             QMessageBox.critical(self, "Error", "Unable to load updated data.")
+             QMessageBox.critical(self, "Erreur", "Impossible de charger les données mises à jour.")
         else:
-              QMessageBox.information(self, "Success", "Data updated successfully!")
+              QMessageBox.information(self, "Terminé", "Données TRaSH à jour !")
         
         self.setup_ui()
         self.show()
 
     def on_sync_error(self, err):
         self.progress_dialog.cancel()
-        QMessageBox.warning(self, "Warning", f"Update failed: {err}\nLoading existing local data.")
+        QMessageBox.warning(self, "Attention", f"Mise à jour impossible : {err}\nLes données déjà présentes sont utilisées.")
         if not self.data_manager.load_data():
-            QMessageBox.critical(self, "Error", "Unable to load local data.")
+            QMessageBox.critical(self, "Erreur", "Impossible de charger les données locales.")
         self.setup_ui()
         self.show()
 
@@ -533,7 +542,7 @@ class MainWindow(QMainWindow):
         self.btn_prev_tab.setIcon(self.style().standardIcon(QStyle.SP_ArrowLeft))
         self.btn_prev_tab.setFixedSize(30, 30)
         self.btn_prev_tab.setIconSize(QSize(16, 16))
-        self.btn_prev_tab.setToolTip("Previous tab")
+        self.btn_prev_tab.setToolTip("Serveur précédent")
         self.btn_prev_tab.setStyleSheet(nav_btn_style)
         self.btn_prev_tab.clicked.connect(self.select_prev_tab)
         right_corner_layout.addWidget(self.btn_prev_tab)
@@ -543,7 +552,7 @@ class MainWindow(QMainWindow):
         self.btn_next_tab.setIcon(self.style().standardIcon(QStyle.SP_ArrowRight))
         self.btn_next_tab.setFixedSize(30, 30)
         self.btn_next_tab.setIconSize(QSize(16, 16))
-        self.btn_next_tab.setToolTip("Next tab")
+        self.btn_next_tab.setToolTip("Serveur suivant")
         self.btn_next_tab.setStyleSheet(nav_btn_style)
         self.btn_next_tab.clicked.connect(self.select_next_tab)
         right_corner_layout.addWidget(self.btn_next_tab)
@@ -554,7 +563,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(lbl_h_sep)
         
         # Add (Existing logic)
-        self.btn_add_tab = QPushButton("+ Add")
+        self.btn_add_tab = QPushButton("+ Ajouter")
         self.btn_add_tab.setFixedHeight(30)
         self.btn_add_tab.setStyleSheet("""
             QPushButton { background-color: #ff4500; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -564,7 +573,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(self.btn_add_tab)
         
         # Delete (Existing logic)
-        self.btn_del_tab = QPushButton("Delete")
+        self.btn_del_tab = QPushButton("Supprimer")
         self.btn_del_tab.setFixedHeight(30)
         self.btn_del_tab.setStyleSheet("""
             QPushButton { background-color: #ff4444; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -579,7 +588,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(lbl_sep_2)
 
         # Load YAML
-        self.btn_load_yaml = QPushButton("Load YAML")
+        self.btn_load_yaml = QPushButton("Ouvrir un YAML")
         self.btn_load_yaml.setFixedHeight(30)
         self.btn_load_yaml.setStyleSheet("""
             QPushButton { background-color: #6200ea; color: white; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -594,7 +603,7 @@ class MainWindow(QMainWindow):
         right_corner_layout.addWidget(lbl_sep)
 
         # Gen YAML (Existing)
-        self.btn_gen_yaml = QPushButton("Generate YAML")
+        self.btn_gen_yaml = QPushButton("Générer le YAML")
         self.btn_gen_yaml.setFixedHeight(30)
         self.btn_gen_yaml.setStyleSheet("""
             QPushButton { background-color: #00e5ff; color: black; border: none; font-weight: bold; padding: 0 10px; border-radius: 4px; }
@@ -629,11 +638,11 @@ class MainWindow(QMainWindow):
         """Dialog to create a new instance."""
         # Simple dialog: Type (Radio), Name (Line)
         dialog = QDialog(self)
-        dialog.setWindowTitle("New Instance")
+        dialog.setWindowTitle("Nouveau serveur")
         layout = QVBoxLayout(dialog)
         
         # Type Selection
-        layout.addWidget(QLabel("Application Type:"))
+        layout.addWidget(QLabel("Application :"))
         type_group = QButtonGroup(dialog)
         
         rb_radarr = QRadioButton("Radarr")
@@ -646,8 +655,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(rb_sonarr)
         
         # Name
-        layout.addWidget(QLabel("Instance Name:"))
-        name_edit = QLineEdit("My Instance")
+        layout.addWidget(QLabel("Nom du serveur :"))
+        name_edit = QLineEdit("mon-serveur")
         layout.addWidget(name_edit)
         
         # Buttons
@@ -658,7 +667,7 @@ class MainWindow(QMainWindow):
         
         if dialog.exec() == QDialog.Accepted:
             app_type = "radarr" if rb_radarr.isChecked() else "sonarr"
-            name = name_edit.text().strip() or f"My {app_type.capitalize()}"
+            name = name_edit.text().strip() or f"mon-{app_type}"
             self.add_instance(app_type, name)
 
     def add_instance(self, app_type, name):
@@ -676,7 +685,7 @@ class MainWindow(QMainWindow):
         icon = QIcon() # Placeholder or app specific icon
         self.tabs.addTab(editor, name)
         self.tabs.setCurrentWidget(editor)
-        self.status_bar.showMessage(f"Instance '{name}' added.", 3000)
+        self.status_bar.showMessage(f"Serveur « {name} » ajouté.", 3000)
 
     def remove_current_instance(self):
         idx = self.tabs.currentIndex()
@@ -685,10 +694,10 @@ class MainWindow(QMainWindow):
             
     def remove_instance_by_index(self, index):
         name = self.tabs.tabText(index)
-        confirm = QMessageBox.question(self, "Delete", f"Do you really want to delete instance '{name}'?", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "Supprimer", f"Supprimer le serveur « {name} » ?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             self.tabs.removeTab(index)
-            self.status_bar.showMessage(f"Instance '{name}' deleted.", 3000)
+            self.status_bar.showMessage(f"Serveur « {name} » supprimé.", 3000)
 
     def generate_yaml(self):
         radarr_instances = []
@@ -697,12 +706,12 @@ class MainWindow(QMainWindow):
         editors = [self.tabs.widget(i) for i in range(self.tabs.count())]
         editors = [e for e in editors if isinstance(e, InstanceEditor) and not e.is_blank()]
         if not editors:
-            QMessageBox.information(self, "Nothing to generate",
-                                    "Pick a profile first: open a tab and use the quick wizard (Act 1).")
+            QMessageBox.information(self, "Rien à générer",
+                                    "Choisissez d'abord un profil : utilisez l'assistant rapide de l'étape 1.")
             return
         problems = [p for e in editors for p in e.problems()]
-        if problems and QMessageBox.question(self, "Check your configuration",
-                                             "\n\n".join(problems) + "\n\nGenerate anyway?",
+        if problems and QMessageBox.question(self, "Vérifiez votre configuration",
+                                             "\n\n".join(problems) + "\n\nGénérer quand même ?",
                                              QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
 
@@ -719,27 +728,27 @@ class MainWindow(QMainWindow):
         )
         
         # Portable: let the user pick the file, defaulting next to the app (not the shortcut's cwd)
-        target, _ = QFileDialog.getSaveFileName(self, "Save Recyclarr Configuration",
-                                                str(app_dir() / "recyclarr.yml"), "YAML Files (*.yml *.yaml)")
+        target, _ = QFileDialog.getSaveFileName(self, "Enregistrer la configuration Recyclarr",
+                                                str(app_dir() / "recyclarr.yml"), "Fichiers YAML (*.yml *.yaml)")
         if not target:
             return
 
         generator = YAMLGenerator()
         try:
             path = generator.generate_config(full_config, filename=target)
-            QMessageBox.information(self, "Success", (
-                f"File generated:\n{path}\n\n"
-                "Next steps:\n"
-                "1. Install Recyclarr: https://recyclarr.dev/guide/installation/\n"
-                f'2. Preview the changes: recyclarr sync --preview --config "{path}"\n'
-                f'3. Apply them: recyclarr sync --config "{path}"\n\n'
-                "Lines starting with [ERR] mean something was not applied."))
+            QMessageBox.information(self, "Fichier créé", (
+                f"Fichier créé :\n{path}\n\n"
+                "Étapes suivantes :\n"
+                "1. Installez Recyclarr : https://recyclarr.dev/guide/installation/\n"
+                f'2. Vérifiez sans rien changer : recyclarr sync --preview --config "{path}"\n'
+                f'3. Appliquez : recyclarr sync --config "{path}"\n\n'
+                "Une ligne qui commence par [ERR] signale quelque chose qui n'a pas été appliqué."))
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Erreur", str(e))
 
     def load_yaml_config(self):
         """Loads a config.yml file and repopulates the tabs."""
-        path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "YAML Files (*.yml *.yaml)")
+        path, _ = QFileDialog.getOpenFileName(self, "Ouvrir une configuration", "", "Fichiers YAML (*.yml *.yaml)")
         if not path:
             return
             
@@ -747,13 +756,13 @@ class MainWindow(QMainWindow):
         try:
             data = generator.load_yaml(path)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")
+            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir le fichier :\n{e}")
             return
             
         # Confirm overwrite
         if self.tabs.count() > 0:
-            resp = QMessageBox.question(self, "Overwrite?", 
-                                        "Loading a file will close current tabs. Continue?",
+            resp = QMessageBox.question(self, "Remplacer ?", 
+                                        "Ouvrir un fichier ferme les onglets actuels. Continuer ?",
                                         QMessageBox.Yes | QMessageBox.No)
             if resp != QMessageBox.Yes:
                 return
@@ -786,14 +795,19 @@ class MainWindow(QMainWindow):
         v7 = [inc["template"] for app in ("radarr", "sonarr") for inst in (data.get(app) or {}).values()
               if isinstance(inst, dict) for inc in inst.get("include") or [] if isinstance(inc, dict) and "template" in inc]
         if v7:
-            QMessageBox.warning(self, "Recyclarr v7 includes",
-                                "These v7 include templates no longer exist in Recyclarr v8 and were ignored:\n"
-                                + "\n".join(v7) + "\n\nPick a v8 template or use the quick wizard (Act 1).")
-        QMessageBox.information(self, "Success", "Configuration loaded!")
+            QMessageBox.warning(self, "Modèles Recyclarr v7",
+                                "Ces modèles v7 n'existent plus dans Recyclarr v8 et ont été ignorés :\n"
+                                + "\n".join(v7) + "\n\nChoisissez un modèle officiel ou l'assistant rapide (étape 1).")
+        QMessageBox.information(self, "Terminé", "Configuration ouverte !")
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    # French standard buttons and dialogs (OK/Annuler, Oui/Non)
+    translator = QTranslator(app)
+    if translator.load(QLocale("fr"), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
+        app.installTranslator(translator)
     
     # Apply Theme
     app.setStyleSheet(GLOBAL_STYLESHEET)

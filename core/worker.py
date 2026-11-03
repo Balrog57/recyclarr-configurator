@@ -30,10 +30,10 @@ class SyncWorker(QThread):
     def run(self):
         """Executes the extraction process."""
         try:
-            self.progress.emit("Initializing extraction...")
+            self.progress.emit("Préparation…")
             
             # --- Extract Templates ---
-            self.progress.emit("Extracting Recyclarr templates...")
+            self.progress.emit("Récupération des modèles Recyclarr…")
             
             # Initialize Client and Extractor from templates_extractor
             try:
@@ -44,15 +44,15 @@ class SyncWorker(QThread):
                 # Perform extraction
                 templates_data = extractor_tmpl.extract_all()
                 self._save_json(templates_data, "templates.json")
-                self.progress.emit("Templates extracted successfully.")
+                self.progress.emit("Modèles récupérés.")
                 
             except Exception as e:
                 logger.exception("Error extracting templates")
-                self.error.emit(f"Error extracting templates: {str(e)}")
+                self.error.emit(f"Erreur pendant la récupération des modèles : {str(e)}")
                 return # Stop processing on heavy error? Or continue? Let's stop to be safe.
 
             # --- Extract Custom Formats ---
-            self.progress.emit("Extracting TRaSH Custom Formats...")
+            self.progress.emit("Récupération des critères TRaSH…")
             
             try:
                 # Instantiate classes from trash_cf_extractor
@@ -67,21 +67,21 @@ class SyncWorker(QThread):
                 # Convert to dict format expected by generating function
                 cf_data = trash_cf_extractor.generate_output(formats_raw)
                 self._save_json(cf_data, "custom_formats.json")
-                self.progress.emit("Custom Formats extracted successfully.")
+                self.progress.emit("Critères récupérés.")
                 
             except Exception as e:
                 logger.exception("Error extracting custom formats")
-                self.error.emit(f"Error extracting Custom Formats: {str(e)}")
+                self.error.emit(f"Erreur pendant la récupération des critères : {str(e)}")
                 return
 
             # --- Finalize ---
-            self.progress.emit("Synchronization complete.")
+            self.progress.emit("Mise à jour terminée.")
             self.data_ready.emit(templates_data, cf_data)
             self.finished.emit()
 
         except Exception as e:
             logger.exception("Critical worker error")
-            self.error.emit(f"Critical error: {str(e)}")
+            self.error.emit(f"Erreur : {str(e)}")
 
     def _save_json(self, data, filename):
         """Helper to save JSON data to disk."""
