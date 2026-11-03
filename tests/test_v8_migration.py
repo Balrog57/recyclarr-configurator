@@ -2,6 +2,7 @@ import os
 import json
 import pytest
 from pathlib import Path
+from PySide6.QtCore import Qt
 
 # Use offscreen platform for Qt tests in headless environment
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -325,3 +326,164 @@ def test_sonarr_instance_editor_selection_and_generation(data_manager, tmp_path)
     assert "trash_id:" in yaml_text
 
 
+
+
+def _yaml_cycle(dm, data, app="radarr"):
+    """Load YAML data in the editor, visit every act, return the regenerated instance."""
+    from PySide6.QtWidgets import QApplication
+    from main_gui_app import InstanceEditor
+
+    QApplication.instance() or QApplication([])
+    editor = InstanceEditor(dm, app_type=app)
+    editor.load_config(data)
+    for tab in (1, 2, 3, 0):
+        editor.tabs.setCurrentIndex(tab)
+    return editor, YAMLGenerator()._generate_instance_config(editor.get_config())
+
+
+HD_BLURAY = "d1d67249d3890e49bc12e275d989a7e9"
+
+
+def test_load_yaml_assign_scores_to_by_trash_id(data_manager):
+    """assign_scores_to accepts a trash_id (Recyclarr docs): it targets every variant of the profile."""
+    cf = data_manager.get_quality_profile_by_id(HD_BLURAY)["formatItems"]
+    tid = next(iter(cf.values()))
+    _, out = _yaml_cycle(data_manager, {
+        "quality_profiles": [{"trash_id": HD_BLURAY, "name": "A"}, {"trash_id": HD_BLURAY, "name": "B"}],
+        "custom_formats": [{"trash_ids": [tid], "assign_scores_to": [{"trash_id": HD_BLURAY, "score": -5}]}],
+    })
+    assert out["custom_formats"][0]["assign_scores_to"] == [{"name": "A", "score": -5}, {"name": "B", "score": -5}]
+
+
+def test_load_yaml_keeps_settings_the_ui_does_not_edit(data_manager):
+    disabled_group = {"name": "WEB 1080p", "enabled": False, "qualities": ["WEBDL-1080p", "WEBRip-1080p"]}
+    data = {
+        "base_url": "http://r", "api_key": "k", "delete_old_custom_formats": False,
+        "quality_definition": {"type": "movie", "preferred_ratio": 0.5},
+        "media_naming": {"movie": {"rename": True}},
+        "media_management": {"propers_and_repacks": "do_not_prefer"},
+        "include": [{"config": "local.yml"}, {"template": "radarr-v7-gone"}],
+        "quality_profiles": [{
+            "trash_id": HD_BLURAY, "name": "Guide",
+            "min_upgrade_format_score": 5, "quality_sort": "bottom",
+            "quality_definition": {"type": "anime"},
+            "reset_unmatched_scores": {"enabled": True, "except": ["Foo"], "except_patterns": ["^Bar"]},
+            "upgrade": {"allowed": True, "until_quality": "Bluray-1080p"},
+            "qualities": [{"name": "Bluray-1080p"}, disabled_group],
+        }, {
+            "name": "Perso",
+            "qualities": [{"name": "HDTV-720p", "enabled": False}, {"name": "Bluray-720p"}],
+            "upgrade": {"allowed": True, "until_quality": "Bluray-720p"},
+        }],
+    }
+    _, out = _yaml_cycle(data_manager, data)
+
+    assert out["quality_definition"] == {"type": "movie", "preferred_ratio": 0.5}
+    assert out["media_naming"] == data["media_naming"] and out["media_management"] == data["media_management"]
+    assert out["include"] == [{"config": "local.yml"}]
+    guide, custom = out["quality_profiles"]
+    assert guide["min_upgrade_format_score"] == 5 and guide["quality_sort"] == "bottom"
+    assert guide["quality_definition"] == {"type": "anime"}
+    assert guide["reset_unmatched_scores"] == {"enabled": True, "except": ["Foo"], "except_patterns": ["^Bar"]}
+    assert guide["qualities"] == [{"name": "Bluray-1080p"}, disabled_group]
+    assert custom["qualities"] == [{"name": "HDTV-720p", "enabled": False}, {"name": "Bluray-720p"}]
+
+    # Stable when loaded again
+    _, again = _yaml_cycle(data_manager, out)
+    assert again == out
+
+
+def test_load_yaml_keeps_customized_default_group(data_manager):
+    """A default group listed in `add` keeps its exclude, unless the user unchecks the group."""
+    from core.resolver import auto_groups
+    groups = [data_manager.get_include_data("radarr", g) for g in auto_groups(data_manager, "radarr", [HD_BLURAY])]
+    group = next(g for g in groups if any(c.get("default") and not c.get("required") for c in g["content"]["custom_formats"]))
+    excluded = next(c["trash_id"] for c in group["content"]["custom_formats"] if c.get("default") and not c.get("required"))
+    entry = {"trash_id": group["trash_id"], "exclude": [excluded]}
+    data = {"quality_profiles": [{"trash_id": HD_BLURAY}], "custom_format_groups": {"add": [entry]}}
+
+    editor, out = _yaml_cycle(data_manager, data)
+    assert out["custom_format_groups"]["add"] == [entry]
+
+    # Unchecked: opted out of the group, no contradictory add + skip
+    item = next(i for i in editor.act1_widget._group_items() if i.data(0, Qt.UserRole) == group["trash_id"])
+    item.setCheckState(0, Qt.Unchecked)
+    out = YAMLGenerator()._generate_instance_config(editor.get_config())
+    assert out["custom_format_groups"] == {"skip": [group["trash_id"]]}
+
+
+def test_profile_dialog_keeps_disabled_qualities():
+    from PySide6.QtWidgets import QApplication
+    from ui.widgets.profile_builder import ProfileEditorDialog
+
+    QApplication.instance() or QApplication([])
+    profile = QualityProfile(name="Perso", items=[QualityProfileItem("HDTV-720p", enabled=False), QualityProfileItem("Bluray-720p")])
+    dialog = ProfileEditorDialog(profile=profile, app_type="radarr")
+    dialog.save_and_accept()
+    assert {i.name: i.enabled for i in dialog.get_profile().items} == {"HDTV-720p": False, "Bluray-720p": True}
+
+
+@pytest.mark.parametrize("app", ["radarr", "sonarr"])
+def test_guide_profiles_stay_inherited_through_dialog(data_manager, app):
+    """Guide values stay out of the YAML, even after opening and validating the dialog unchanged."""
+    from PySide6.QtWidgets import QApplication
+    from ui.widgets.profile_builder import ProfileEditorDialog, QualityProfileManager
+
+    QApplication.instance() or QApplication([])
+    for guide in data_manager.get_quality_profiles_for_app(app):
+        manager = QualityProfileManager(app)
+        manager.sync_profiles([{**guide, "active": True}])
+        profile = manager.get_profiles()[0]
+        # Act 3 shows what the guide applies
+        assert profile.min_format_score == guide["minFormatScore"]
+        ProfileEditorDialog(profile=profile, app_type=app).save_and_accept()
+        out = YAMLGenerator()._generate_instance_config(InstanceConfig("i", "u", "k", custom_profiles=[profile]))
+        assert set(out["quality_profiles"][0]) == {"trash_id", "name", "reset_unmatched_scores"}, guide["name"]
+
+
+def test_guide_profile_writes_only_what_changes(data_manager):
+    anime = "722b624f9af1e492284c4bc842153a38"  # guide minFormatScore: 100
+    _, out = _yaml_cycle(data_manager, {"quality_profiles": [{"trash_id": anime}]})
+    assert set(out["quality_profiles"][0]) == {"trash_id", "name"}  # no reset_unmatched_scores in, none out
+    assert out["delete_old_custom_formats"] is False
+
+    # Explicit values win, even equal to the guide or 0
+    qp = {"trash_id": anime, "min_format_score": 0, "reset_unmatched_scores": {"enabled": True},
+          "upgrade": {"allowed": False, "until_score": 0}}
+    editor, out = _yaml_cycle(data_manager, {"quality_profiles": [qp]})
+    got = out["quality_profiles"][0]
+    assert got["min_format_score"] == 0 and got["reset_unmatched_scores"] == {"enabled": True}
+    assert got["upgrade"] == {"allowed": False, "until_score": 0}
+
+    # A change made in Act 3 is written
+    editor.act2_widget.get_profiles()[0].upgrade_until = "Bluray-720p"
+    changed = YAMLGenerator()._generate_instance_config(editor.get_config())["quality_profiles"][0]
+    assert changed["upgrade"]["until_quality"] == "Bluray-720p"
+
+
+def test_dialog_edit_of_guide_qualities_is_written():
+    from PySide6.QtWidgets import QApplication
+    from ui.widgets.profile_builder import ProfileEditorDialog
+
+    QApplication.instance() or QApplication([])
+    profile = QualityProfile(name="G", trash_id=HD_BLURAY, active=True, upgrade_allowed=True, upgrade_until="Bluray-1080p",
+                             items=[QualityProfileItem("Bluray-1080p"), QualityProfileItem("Bluray-720p")],
+                             guide_values={"upgrade_allowed": True, "upgrade_until": "Bluray-1080p", "until_score": 10000,
+                                           "min_format_score": 0, "score_set": ""})
+    dialog = ProfileEditorDialog(profile=profile, app_type="radarr")
+    dialog.tree.takeTopLevelItem(1)
+    dialog.save_and_accept()
+    qp = YAMLGenerator()._generate_instance_config(InstanceConfig("i", "u", "k", custom_profiles=[profile]))["quality_profiles"][0]
+    assert qp["qualities"] == [{"name": "Bluray-1080p"}]
+    assert qp["upgrade"] == {"allowed": True, "until_quality": "Bluray-1080p"}
+
+
+def test_resolver_applies_exclude_on_default_group(data_manager):
+    from core.resolver import auto_groups, resolve
+    groups = [data_manager.get_include_data("radarr", g) for g in auto_groups(data_manager, "radarr", [HD_BLURAY])]
+    group = next(g for g in groups if any(c.get("default") and not c.get("required") for c in g["content"]["custom_formats"]))
+    excluded = next(c["trash_id"] for c in group["content"]["custom_formats"] if c.get("default") and not c.get("required"))
+    base = {"quality_profiles": [{"trash_id": HD_BLURAY}]}
+    assert excluded in resolve(base, "radarr", data_manager)["HD Bluray + WEB"]["cfs"]
+    customized = {**base, "custom_format_groups": {"add": [{"trash_id": group["trash_id"], "exclude": [excluded]}]}}
+    assert excluded not in resolve(customized, "radarr", data_manager)["HD Bluray + WEB"]["cfs"]

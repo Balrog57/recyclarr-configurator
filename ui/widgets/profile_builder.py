@@ -478,8 +478,16 @@ class ProfileEditorDialog(QDialog):
         self.profile.score_set = self.score_set_edit.text().strip()
         self.profile.quality_sort = self.sort_combo.currentText()
         
+        # The tree cannot edit `enabled`: keep what the YAML set
+        previous = self.profile.items
+        disabled = {item.name for item in previous if not item.enabled}
         self.profile.items = self.tree.get_profile_structure()
-        
+        for item in self.profile.items:
+            item.enabled = item.name not in disabled
+        # Guide-backed: a changed structure becomes an explicit override of the guide qualities
+        if self.profile.trash_id and self.profile.items != previous:
+            self.profile.has_quality_overrides = True
+
         self.accept()
         
     def get_profile(self) -> QualityProfile:
@@ -638,24 +646,34 @@ class QualityProfileManager(QWidget):
             rus = p_data.get("reset_unmatched_scores")
             if isinstance(rus, dict):
                 profile.reset_unmatched_scores = rus.get("enabled", True)
+                profile.reset_exceptions = {k: rus[k] for k in ("except", "except_patterns") if rus.get(k)}
             elif isinstance(rus, bool):
                 profile.reset_unmatched_scores = rus
                 
             # Upgrade settings
-            upg = p_data.get("upgrade", {})
-            if isinstance(upg, dict) and upg:
-                profile.upgrade_allowed = upg.get("allowed", False)
-                profile.upgrade_until = upg.get("until_quality", "")
-                profile.until_score = upg.get("until_score", 10000)
-            elif "upgradeAllowed" in p_data:
-                profile.upgrade_allowed = p_data.get("upgradeAllowed", False)
-                profile.upgrade_until = p_data.get("cutoff", "")
-                profile.until_score = p_data.get("cutoffFormatScore", 10000)
-                
-            profile.min_format_score = p_data.get("min_format_score", 0)
+            upg = p_data.get("upgrade")
+            upg = upg if isinstance(upg, dict) else {}
+            # TRaSH values, then what the YAML overrides (the guide dict comes merged with the YAML keys)
+            guide = {} if "upgradeAllowed" not in p_data else {
+                "upgrade_allowed": p_data["upgradeAllowed"],
+                "upgrade_until": p_data.get("cutoff", ""),
+                "until_score": p_data.get("cutoffFormatScore", 10000),
+                "min_format_score": p_data.get("minFormatScore", 0),
+                "score_set": (p_data.get("content") or {}).get("trash_score_set", ""),
+            }
+            profile.upgrade_allowed = upg.get("allowed", guide.get("upgrade_allowed", False))
+            profile.upgrade_until = upg.get("until_quality", guide.get("upgrade_until", ""))
+            profile.until_score = upg.get("until_score", guide.get("until_score", 10000))
+            profile.min_format_score = p_data.get("min_format_score", guide.get("min_format_score", 0))
             profile.score_set = p_data.get("score_set") or p_data.get("trash_score_set", "")
+            yaml_set = {attr for attr, key in (("upgrade_allowed", "allowed"), ("upgrade_until", "until_quality"),
+                                               ("until_score", "until_score")) if key in upg}
+            if "min_format_score" in p_data:
+                yaml_set.add("min_format_score")
+            profile.guide_values = {k: v for k, v in guide.items() if k not in yaml_set}
             profile.quality_sort = p_data.get("quality_sort", "top")
-            
+            profile.yaml_extra = {k: p_data[k] for k in ("min_upgrade_format_score", "quality_definition") if k in p_data}
+
             # Custom profiles (from YAML) are active by default, Includes (Templates) are inactive by default
             default_active = (source == "custom")
             profile.active = p_data.get("active", default_active)
@@ -664,13 +682,14 @@ class QualityProfileManager(QWidget):
             qualities = p_data.get("qualities", [])
             items = []
             if qualities:
+                profile.has_quality_overrides = bool(trash_id)
                 for q_entry in qualities:
                     if isinstance(q_entry, str):
                         items.append(QualityProfileItem(name=q_entry))
                     elif isinstance(q_entry, dict):
                         q_name = q_entry.get("name", "Unknown")
                         q_sub = q_entry.get("qualities", [])
-                        items.append(QualityProfileItem(name=q_name, qualities=q_sub))
+                        items.append(QualityProfileItem(name=q_name, qualities=q_sub, enabled=q_entry.get("enabled", True)))
             elif "items" in p_data:
                 # Parse from TRaSH Guides JSON structure
                 for q_item in p_data.get("items", []):

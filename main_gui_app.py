@@ -255,7 +255,9 @@ class InstanceEditor(QWidget):
             if not isinstance(qp, dict):
                 continue
             guide_qp = self.data_manager.get_quality_profile_by_id(qp["trash_id"]) if qp.get("trash_id") else None
-            profiles.append({**guide_qp, **qp, "active": True} if guide_qp else {**qp, "active": True})
+            # Without the key Recyclarr resets nothing: same as disabled
+            profile = {"reset_unmatched_scores": {"enabled": False}, **qp, "active": True}
+            profiles.append({**guide_qp, **profile} if guide_qp else profile)
         return profiles
 
     def _select_casting(self, profile_ids, add_ids, skip_ids):
@@ -327,23 +329,56 @@ class InstanceEditor(QWidget):
         """Populates the editor from a dictionary (YAML data)."""
         self.config.base_url = data.get("base_url", "")
         self.config.api_key = data.get("api_key", "")
-        self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", True)
+        self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", False)
         self._set_qdef(data)
-        if data.get("quality_definition"):
+        qdef = data.get("quality_definition")
+        if qdef:
             self.config.quality_definition_type = self.combo_qdef.currentText()
+        self.config.quality_definition_extra = {k: v for k, v in qdef.items() if k != "type"} if isinstance(qdef, dict) else {}
+        self.config.yaml_extra = {k: data[k] for k in ("media_naming", "media_management") if data.get(k)}
+        # v7 `template:` includes no longer exist in v8 (load_yaml_config warns about them)
+        includes = [i for i in data.get("include") or [] if "template" not in i]
+        if includes:
+            self.config.yaml_extra["include"] = includes
 
         self.act3_widget.active_assignments.clear()
-        self.act2_widget.load_profiles(self._guide_profiles(data))
+        profiles = self._guide_profiles(data)
+        self.act2_widget.load_profiles(profiles)
         self._select_casting_from(data)
         groups_add = (data.get("custom_format_groups") or {}).get("add") or []
         self.loaded_group_options = {g["trash_id"]: {k: v for k, v in g.items() if k != "trash_id"}
                                      for g in groups_add if isinstance(g, dict) and len(g) > 1}
-        self.act3_widget.load_assignments_from_template(data.get("custom_formats") or [], clear_existing=True)
+        self.act3_widget.load_assignments_from_template(self._assign_by_name(data.get("custom_formats") or [], profiles),
+                                                        clear_existing=True)
+
+    @staticmethod
+    def _assign_by_name(custom_formats: list, profiles: list) -> list:
+        """custom_formats with assign_scores_to references by trash_id turned into names (Act 4 keys scores by name)."""
+        names = {}
+        for p in profiles:
+            if p.get("trash_id") and p.get("name"):
+                names.setdefault(p["trash_id"], []).append(p["name"])
+        result = []
+        for entry in custom_formats:
+            assigns = []
+            for a in entry.get("assign_scores_to") or []:
+                if a.get("trash_id"):
+                    if a["trash_id"] not in names:
+                        logger.warning(f"assign_scores_to ignored: profile {a['trash_id']} is not in quality_profiles")
+                    # A trash_id targets every variant of the profile
+                    assigns += [{**{k: v for k, v in a.items() if k != "trash_id"}, "name": n} for n in names.get(a["trash_id"], [])]
+                else:
+                    assigns.append(a)
+            result.append({**entry, "assign_scores_to": assigns})
+        return result
 
     def get_config(self) -> InstanceConfig:
         """Collect data from all widgets."""
         self.config.quality_definition_type = self.combo_qdef.currentText()
-        self.config.includes_cfs, self.config.cf_group_skip = self.act1_widget.group_state()
+        added, self.config.cf_group_skip = self.act1_widget.group_state()
+        # An auto-synced group listed in `add` customizes its CFs (exclude, select...): keep it if still checked
+        checked = self.act1_widget.get_selected_by_type("custom-formats")
+        self.config.includes_cfs = added + [g for g in self.loaded_group_options if g in checked and g not in added]
         self.config.custom_profiles = self.act2_widget.get_profiles()
         # Added groups get what Recyclarr needs to apply them (assign_scores_to, select...) unless the YAML set it
         targets = [(p.name, p.trash_id, p.score_set or (self.data_manager.get_quality_profile_by_id(p.trash_id) or {}).get("score_set"))

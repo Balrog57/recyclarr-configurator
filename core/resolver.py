@@ -90,13 +90,16 @@ def resolve(instance: dict, app: str, dm, includes: list = None) -> dict:
     groups_cfg = instance.get("custom_format_groups") or {}
     skip = set(groups_cfg.get("skip") or [])
     all_groups = [g for g in dm.get_includes_by_type(app, "custom-formats")]
+    added = {e["trash_id"]: e for e in groups_cfg.get("add") or []}
     for name, p in profiles.items():
         for tid in p.pop("guide_items"):
             add(name, tid)
         if name in trash_of:
             for g in all_groups:
                 if g.get("default") and g["trash_id"] not in skip and group_includes(g, trash_of[name]):
-                    for tid in group_cfs(g):
+                    # Listed in `add` too: its select/exclude customize the auto-synced group
+                    e = added.get(g["trash_id"], {})
+                    for tid in group_cfs(g, e.get("select"), e.get("exclude"), e.get("select_all")):
                         add(name, tid)
 
     for entry in groups_cfg.get("add") or []:

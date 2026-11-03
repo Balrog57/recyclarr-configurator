@@ -59,7 +59,7 @@ Select the ingredients for your configuration directly from TRaSH Guides (Recycl
 
 ### 🎬 Act 3: Staging (Quality Profiles)
 Create and customize your Quality Profiles.
-*   **Guide-Backed Profiles**: Retain their TRaSH ID (`trash_id`) so Recyclarr automatically syncs upstream recommendations.
+*   **Guide-Backed Profiles**: Retain their TRaSH ID (`trash_id`) so Recyclarr automatically syncs upstream recommendations. Only what you change is written to the YAML (upgrade, scores, score set); editing the qualities of such a profile writes them as an explicit override, which then stops following TRaSH.
 *   **New Profile**: Create custom profiles from scratch with custom qualities.
 *   **Drag & Drop**: Build your profile by dragging qualities from the right list to the left tree.
 *   **Grouping**: Select multiple qualities and Right-Click > "Group" to create a custom group (e.g., `HD-1080p`).

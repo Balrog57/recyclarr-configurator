@@ -6,6 +6,7 @@ class QualityProfileItem:
     """Représente une qualité dans un profil (ex: Bluray-1080p)"""
     name: str
     qualities: List[str] = field(default_factory=list) # Pour les groupes
+    enabled: bool = True
 
 @dataclass
 class QualityProfile:
@@ -22,6 +23,12 @@ class QualityProfile:
     items: List[QualityProfileItem] = field(default_factory=list) # La structure arborescente
     source: str = "custom" # "custom", "include", ou "guide"
     active: bool = False
+    # Read from a YAML and written back as is
+    has_quality_overrides: bool = False # Profil TRaSH dont le YAML redéfinit `qualities`
+    reset_exceptions: Dict = field(default_factory=dict) # reset_unmatched_scores: except, except_patterns
+    yaml_extra: Dict = field(default_factory=dict) # min_upgrade_format_score, quality_definition
+    # Valeurs du guide (attribut -> valeur) non redéfinies par le YAML: écrites seulement si elles changent
+    guide_values: Dict = field(default_factory=dict)
 
 @dataclass
 class CustomFormatAssignment:
@@ -42,7 +49,7 @@ class InstanceConfig:
     base_url: str
     api_key: str
     quality_definition_type: str = "movie" # movie, anime, ou series
-    delete_old_custom_formats: bool = True
+    delete_old_custom_formats: bool = False
     # custom_format_groups: opt-in groups (add) and auto-synced default groups opted out (skip)
     includes_cfs: List[str] = field(default_factory=list)
     cf_group_skip: List[str] = field(default_factory=list)
@@ -51,6 +58,9 @@ class InstanceConfig:
     # Les créations manuelles
     custom_profiles: List[QualityProfile] = field(default_factory=list)
     active_cfs: List[CustomFormatAssignment] = field(default_factory=list)
+    # Read from a YAML and written back as is
+    quality_definition_extra: Dict = field(default_factory=dict) # preferred_ratio, qualities
+    yaml_extra: Dict = field(default_factory=dict) # media_naming, media_management, include
 
 @dataclass
 class RecyclarrConfiguration:

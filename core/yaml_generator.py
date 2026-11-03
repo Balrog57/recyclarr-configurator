@@ -80,7 +80,8 @@ class YAMLGenerator:
 
         # 2. Quality Definition (Recyclarr v8 guide-backed standard)
         qdef_type = getattr(instance, "quality_definition_type", None) or default_qdef
-        config["quality_definition"] = CommentedMap({"type": qdef_type})
+        config["quality_definition"] = CommentedMap({"type": qdef_type, **instance.quality_definition_extra})
+        config.update(instance.yaml_extra)
 
         # 3. Custom Format Groups (v8 replaces the removed official include templates)
         groups = CommentedMap()
@@ -108,37 +109,49 @@ class YAMLGenerator:
                 # Always explicit: keeps renames and matches assign_scores_to references by name
                 qp_dict["name"] = qp.name
 
-                qp_dict["reset_unmatched_scores"] = CommentedMap({
-                    "enabled": qp.reset_unmatched_scores
-                })
+                if qp.reset_unmatched_scores or qp.reset_exceptions:
+                    qp_dict["reset_unmatched_scores"] = CommentedMap({
+                        "enabled": qp.reset_unmatched_scores,
+                        **qp.reset_exceptions
+                    })
+                qp_dict.update(qp.yaml_extra)
 
-                # Upgrade settings
-                if qp.upgrade_allowed or qp.upgrade_until:
+                # Values equal to the guide stay out of the YAML: Recyclarr then follows TRaSH when they change
+                def inherited(attr):
+                    return attr in qp.guide_values and getattr(qp, attr) == qp.guide_values[attr]
+
+                # Upgrade settings (until_quality is required as soon as qualities are written)
+                write_until = qp.upgrade_until and (qp.has_quality_overrides or not inherited("upgrade_until"))
+                write_score = not inherited("until_score")
+                if (qp.upgrade_allowed or qp.upgrade_until or qp.guide_values) \
+                        and (write_until or write_score or not inherited("upgrade_allowed")):
                     upgrade_dict = CommentedMap({"allowed": qp.upgrade_allowed})
-                    if qp.upgrade_until:
+                    if write_until:
                         upgrade_dict["until_quality"] = qp.upgrade_until
-                    if qp.until_score:
+                    if write_score:
                         upgrade_dict["until_score"] = qp.until_score
                     qp_dict["upgrade"] = upgrade_dict
 
-                if qp.min_format_score != 0:
+                if not inherited("min_format_score") and (qp.min_format_score != 0 or qp.guide_values):
                     qp_dict["min_format_score"] = qp.min_format_score
 
-                if qp.score_set:
+                if qp.score_set and not inherited("score_set"):
                     qp_dict["score_set"] = qp.score_set
 
-                # Guide-backed profiles take their qualities from TRaSH Guides
-                if not trash_id:
+                if qp.quality_sort != "top":
+                    qp_dict["quality_sort"] = qp.quality_sort
+
+                # Guide-backed profiles take their qualities from TRaSH Guides, unless the YAML overrides them
+                if not trash_id or qp.has_quality_overrides:
                     qualities_structure = []
                     for item in qp.items:
+                        entry = CommentedMap({"name": item.name})
+                        if not item.enabled:
+                            entry["enabled"] = False
                         if item.qualities:
-                            qualities_structure.append(CommentedMap({
-                                "name": item.name,
-                                "qualities": item.qualities
-                            }))
-                        else:
-                            qualities_structure.append(CommentedMap({"name": item.name}))
-                            
+                            entry["qualities"] = item.qualities
+                        qualities_structure.append(entry)
+
                     if qualities_structure:
                         qp_dict["qualities"] = qualities_structure
 
