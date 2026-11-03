@@ -121,6 +121,16 @@ def resolve(instance: dict, app: str, dm, includes: list = None) -> dict:
     return profiles
 
 
+def unreachable_min_scores(instance: dict, app: str, dm) -> list:
+    """[(profile, minimum, total)] Recyclarr refuses: it logs an error, exits 0 and leaves the profile out."""
+    found = []
+    for name, p in resolve(instance, app, dm).items():
+        total = sum(s for s in p["cfs"].values() if s > 0)
+        if p["min_score"] > total:
+            found.append((name, p["min_score"], total))
+    return found
+
+
 def _targets(assigns, profiles, trash_of) -> list:
     names = []
     for a in assigns:

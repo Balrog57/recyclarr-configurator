@@ -44,7 +44,7 @@ Each instance is configured in **4 Acts**:
 ### 🎭 Act 1: The Script (Templates & Base)
 This is where you define the foundation of your instance.
 *   **Instance Name**: Give it a unique name (e.g., `radarr-uhd`).
-*   **Connection**: Right-click on the tab to enter your server's URL and API Key.
+*   **Connection**: Your server's URL and API Key (in Radarr/Sonarr: Settings > General).
 *   **Quality Definition Type**: The types found in TRaSH Guides (e.g. `movie`, `anime`, `sqp-*` for Radarr; `series`, `anime` for Sonarr), written as `quality_definition: type:`.
 *   **Templates**: Official Recyclarr v8 templates (e.g., `french-multi-vf-hd-bluray-web`, `hd-bluray-web`) or manual Custom mode.
 *   **⚡ Assistant rapide**: Pick content (films/séries or animés), a quality tier, the language order (e.g. MULTi > VF > VOSTFR, or MULTi > VOSTFR for anime) and which criteria rejected by TRaSH you accept (e.g. x265, AV1). It loads the matching TRaSH French profile (or the TRaSH French anime recipe) and sets the scores in Act 4. Unchecked languages are rejected.
@@ -81,7 +81,7 @@ The advanced editor for Custom Formats.
 *   **+ Add**: Create a new instance (Radarr or Sonarr).
 *   **Delete**: Remove the current instance (tab).
 *   **Load YAML**: Import an existing `config.yml` (or `.yaml`) to edit your current instances.
-*   **Generate YAML**: The final goal! Choose where to save the complete `recyclarr.yml` file (Recyclarr v8 format).
+*   **Generate YAML**: The final goal! Choose where to save the complete `recyclarr.yml` file (Recyclarr v8 format). Untouched tabs are left out, you are warned about what Recyclarr would refuse, and the commands to run next are shown.
 
 ---
 

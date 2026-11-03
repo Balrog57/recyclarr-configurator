@@ -86,6 +86,19 @@ QListWidget, QTreeWidget {{
     outline: none;
 }}
 
+QCheckBox::indicator, QListView::indicator, QTreeView::indicator {{
+    width: 14px;
+    height: 14px;
+    border: 2px solid {CinemaTheme.TEXT_SECONDARY};
+    border-radius: 3px;
+    background-color: transparent;
+}}
+
+QCheckBox::indicator:checked, QListView::indicator:checked, QTreeView::indicator:checked {{
+    background-color: {CinemaTheme.PRIMARY};
+    border-color: {CinemaTheme.PRIMARY};
+}}
+
 QListWidget::item, QTreeWidget::item {{
     padding: 8px 12px;
     border-radius: 4px;

@@ -23,7 +23,7 @@ from ui.widgets.profile_builder import QualityProfileManager
 from ui.widgets.cf_editor import CFEditor
 from ui.widgets.quick_profile_dialog import QuickProfileDialog
 from core.quick_profile import build_quick_profile, group_add_options, QDEF
-from core.resolver import auto_groups, resolve
+from core.resolver import auto_groups, resolve, unreachable_min_scores
 from dataclasses import replace
 from core.paths import app_dir
 from PySide6.QtWidgets import (QProgressDialog, QDialog, QRadioButton, QButtonGroup, 
@@ -138,9 +138,16 @@ class InstanceEditor(QWidget):
         gen_layout.addRow(QLabel(" ")) # Spacer
         
         # 1.1 Basic Info (Name is handled via Tab Title, URL/Key via right click)
-        self.lbl_info = QLabel("<i>(Right-click on the tab to edit URL & API Key)</i>")
-        self.lbl_info.setStyleSheet("color: #888;")
-        gen_layout.addRow(self.lbl_info)
+        self.edit_url = QLineEdit()
+        self.edit_url.setPlaceholderText("http://localhost:8989" if self.app_type == "sonarr" else "http://localhost:7878")
+        self.edit_url.textEdited.connect(lambda text: setattr(self.config, "base_url", text.strip()))
+        gen_layout.addRow("Server URL:", self.edit_url)
+
+        self.edit_key = QLineEdit()
+        self.edit_key.setEchoMode(QLineEdit.PasswordEchoOnEdit)
+        self.edit_key.setPlaceholderText(f"In {self.app_type.capitalize()}: Settings > General > API Key")
+        self.edit_key.textEdited.connect(lambda text: setattr(self.config, "api_key", text.strip()))
+        gen_layout.addRow("API Key:", self.edit_key)
         
         gen_layout.addRow(QLabel(" ")) # Spacer
         
@@ -282,7 +289,13 @@ class InstanceEditor(QWidget):
             url, key = dialog.get_values()
             self.config.base_url = url
             self.config.api_key = key
+            self._refresh_connection_fields()
             QMessageBox.information(self, "Instance Updated", f"Settings for {self.config.name} saved.")
+
+    def _refresh_connection_fields(self):
+        # str(): a YAML can hold !secret / !env_var values, kept in the config unless the field is edited
+        self.edit_url.setText(str(self.config.base_url or ""))
+        self.edit_key.setText(str(self.config.api_key or ""))
 
     def update_config_name(self, text):
         self.config.name = text
@@ -329,6 +342,7 @@ class InstanceEditor(QWidget):
         """Populates the editor from a dictionary (YAML data)."""
         self.config.base_url = data.get("base_url", "")
         self.config.api_key = data.get("api_key", "")
+        self._refresh_connection_fields()
         self.config.delete_old_custom_formats = data.get("delete_old_custom_formats", False)
         self._set_qdef(data)
         qdef = data.get("quality_definition")
@@ -389,6 +403,23 @@ class InstanceEditor(QWidget):
         }
         self.config.active_cfs = list(self.act3_widget.active_assignments.values())
         return self.config
+
+    def is_blank(self) -> bool:
+        """Tab left untouched: writing it would make `recyclarr sync` stop on a server that was never set up."""
+        config = self.get_config()
+        return not (config.api_key or config.active_cfs or any(p.active for p in config.custom_profiles))
+
+    def problems(self) -> list:
+        """What would make this instance fail in Recyclarr, in words a beginner can act on."""
+        config = self.get_config()
+        found = []
+        if not config.api_key:
+            found.append(f"{config.name}: the API key is missing (Act 1).")
+        instance = YAMLGenerator()._generate_instance_config(config, default_qdef=QDEF[self.app_type])
+        for name, minimum, total in unreachable_min_scores(instance, self.app_type, self.data_manager):
+            found.append(f"{config.name}: Recyclarr will refuse profile '{name}': its minimum score ({minimum}) "
+                         f"is above the total of its positive scores ({total}).")
+        return found
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -663,14 +694,24 @@ class MainWindow(QMainWindow):
         radarr_instances = []
         sonarr_instances = []
 
-        for i in range(self.tabs.count()):
-            editor = self.tabs.widget(i)
-            if isinstance(editor, InstanceEditor):
-                config = editor.get_config()
-                if editor.app_type == "radarr":
-                    radarr_instances.append(config)
-                elif editor.app_type == "sonarr":
-                    sonarr_instances.append(config)
+        editors = [self.tabs.widget(i) for i in range(self.tabs.count())]
+        editors = [e for e in editors if isinstance(e, InstanceEditor) and not e.is_blank()]
+        if not editors:
+            QMessageBox.information(self, "Nothing to generate",
+                                    "Pick a profile first: open a tab and use the quick wizard (Act 1).")
+            return
+        problems = [p for e in editors for p in e.problems()]
+        if problems and QMessageBox.question(self, "Check your configuration",
+                                             "\n\n".join(problems) + "\n\nGenerate anyway?",
+                                             QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+
+        for editor in editors:
+            config = editor.get_config()
+            if editor.app_type == "radarr":
+                radarr_instances.append(config)
+            elif editor.app_type == "sonarr":
+                sonarr_instances.append(config)
         
         full_config = RecyclarrConfiguration(
             radarr_instances=radarr_instances,
@@ -686,7 +727,13 @@ class MainWindow(QMainWindow):
         generator = YAMLGenerator()
         try:
             path = generator.generate_config(full_config, filename=target)
-            QMessageBox.information(self, "Success", f"File generated:\n{path}")
+            QMessageBox.information(self, "Success", (
+                f"File generated:\n{path}\n\n"
+                "Next steps:\n"
+                "1. Install Recyclarr: https://recyclarr.dev/guide/installation/\n"
+                f'2. Preview the changes: recyclarr sync --preview --config "{path}"\n'
+                f'3. Apply them: recyclarr sync --config "{path}"\n\n'
+                "Lines starting with [ERR] mean something was not applied."))
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 

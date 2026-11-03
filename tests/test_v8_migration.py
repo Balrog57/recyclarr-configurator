@@ -487,3 +487,65 @@ def test_resolver_applies_exclude_on_default_group(data_manager):
     assert excluded in resolve(base, "radarr", data_manager)["HD Bluray + WEB"]["cfs"]
     customized = {**base, "custom_format_groups": {"add": [{"trash_id": group["trash_id"], "exclude": [excluded]}]}}
     assert excluded not in resolve(customized, "radarr", data_manager)["HD Bluray + WEB"]["cfs"]
+
+
+def test_no_preset_has_an_unreachable_min_score(data_manager):
+    from core.resolver import unreachable_min_scores
+    for app in ("radarr", "sonarr"):
+        for template in data_manager.get_templates_for_app(app):
+            instance = list(template["content"][app].values())[0]
+            assert unreachable_min_scores(instance, app, data_manager) == [], template["name"]
+
+
+def test_unreachable_min_score_is_detected(data_manager):
+    """Real Recyclarr refuses this profile, logs [ERR] and exits 0."""
+    from core.resolver import unreachable_min_scores
+    instance = {"quality_profiles": [{"name": "Perso", "min_format_score": 10}]}
+    assert unreachable_min_scores(instance, "radarr", data_manager) == [("Perso", 10, 0)]
+
+
+@pytest.fixture
+def window(data_manager, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication
+    import main_gui_app
+
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr(main_gui_app, "UPDATE_DATA_ON_STARTUP", False)
+    messages = []
+    target = tmp_path / "recyclarr.yml"
+    monkeypatch.setattr(main_gui_app.QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(main_gui_app.QMessageBox, "information", lambda _p, _t, text: messages.append(text))
+    win = main_gui_app.MainWindow()
+    return win, target, messages, main_gui_app
+
+
+def test_generate_leaves_untouched_tabs_out(window):
+    win, target, messages, _ = window
+    win.generate_yaml()
+    assert not target.exists() and "Pick a profile" in messages[0]
+
+    radarr = win.tabs.widget(0)
+    radarr.edit_key.setText("key")
+    radarr.edit_key.textEdited.emit("key")
+    radarr.act1_widget.set_selected_includes([HD_BLURAY])
+    radarr.tabs.setCurrentIndex(2)
+    win.generate_yaml()
+    data = YAMLGenerator().load_yaml(str(target))
+    assert "sonarr" not in data and data["radarr"]["Radarr"]["api_key"] == "key"
+    assert "recyclarr sync --preview" in messages[-1]
+
+
+def test_generate_warns_about_what_recyclarr_refuses(window, monkeypatch):
+    win, target, _, module = window
+    radarr = win.tabs.widget(0)
+    radarr.act1_widget.set_selected_includes([HD_BLURAY])
+    radarr.tabs.setCurrentIndex(2)
+    asked = []
+    monkeypatch.setattr(module.QMessageBox, "question", lambda _p, _t, text, _b: asked.append(text) or module.QMessageBox.No)
+    win.generate_yaml()
+    assert "API key is missing" in asked[0] and not target.exists()
+
+
+def test_connection_fields_follow_a_loaded_yaml(data_manager):
+    editor, _ = _yaml_cycle(data_manager, {"base_url": "http://r:1", "api_key": "abc", "quality_profiles": [{"trash_id": HD_BLURAY}]})
+    assert editor.edit_url.text() == "http://r:1" and editor.edit_key.text() == "abc"
