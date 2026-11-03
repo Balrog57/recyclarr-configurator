@@ -11,6 +11,8 @@ Each language "bucket" ends up with this net score:
     VF     (French audio only)       = Language: Not Original
     VOSTFR (original audio + FR subs)= Language: Not French + VOSTFR
     VO     (original audio only)     = Language: Not French
+The chosen order always wins over group, audio and HDR scores, and the last accepted language reaches
+the profile's minimum score, so an accepted language is never refused for having an unknown group.
 """
 import re
 
@@ -30,6 +32,9 @@ LANGUAGE_CF_NAMES = {
     "not_french": "Language: Not French",
     "vostfr": "VOSTFR",
 }
+
+# Below this a guide score means "refuse this release"; above it, a small penalty (e.g. v0 at -51)
+GUIDE_REFUSAL = -1000
 
 # Recyclarr quality_definition types (Recyclarr schema values, not guide data)
 QDEF = {"radarr": "movie", "sonarr": "series"}
@@ -75,26 +80,13 @@ def _language_cfs(dm, app: str) -> dict:
     return {role: by_name[name] for role, name in LANGUAGE_CF_NAMES.items()}
 
 
-def guide_steps(dm, app: str, score_set: str):
-    """(step, reject) read from the guide: MULTi bonus of the score set and the language rejection score."""
-    cfs = _language_cfs(dm, app)
-    multi = cfs["orig_french"].get("trash_scores") or {}
-    step = multi.get(score_set) or 0
-    if step <= 0:  # VOSTFR-first sets don't reward MULTi: reuse the guide's MULTi bonus from the other sets
-        step = max([v for v in multi.values() if v > 0], default=500)
-    # Rejection score the French guide uses for these CFs (other languages' sets, e.g. German -35000, ignored)
-    reject = min((v for cf in cfs.values() for k, v in (cf.get("trash_scores") or {}).items()
-                  if k == score_set or k.startswith("french")), default=0)
-    return step, (reject if reject < 0 else -10000)
-
-
-def language_cf_scores(ranking: list, step: int = 500, reject: int = -10000) -> dict:
-    """ranking: accepted languages, best first. Returns the score of each language CF role."""
+def language_cf_scores(ranking: list, step: int = 500, reject: int = -10000, floor: int = 0) -> dict:
+    """ranking: accepted languages, best first. floor: net score of the last one. Returns the score of each language CF role."""
     if not ranking:
         raise ValueError("Au moins une langue doit être acceptée")
     net = {lang: reject for lang in LANGUAGES}
     for i, lang in enumerate(ranking):
-        net[lang] = (len(ranking) - 1 - i) * step
+        net[lang] = floor + (len(ranking) - 1 - i) * step
     return {
         "orig_french": net["multi"],
         "not_original": net["vf"],
@@ -205,10 +197,16 @@ def build_quick_profile(dm, app: str, anime: bool, tier: str, ranking: list, acc
     if not ranking:
         raise ValueError("Au moins une langue doit être acceptée")
     plan = _base(dm, app, anime, tier, ranking)
-    effective_set = plan["score_set"] or dm.get_quality_profile_by_id(plan["profile_trash_id"]).get("score_set") or "default"
-    step, reject = guide_steps(dm, app, effective_set)
     cfs = _language_cfs(dm, app)
-    scores = {cfs[role]["trash_id"]: s for role, s in language_cf_scores(ranking, step, reject).items()}
+    (_, profile), = resolve(_instance(plan, app, dm), app, dm).items()
+    language = {cf["trash_id"] for cf in cfs.values()}
+    # The guide's until score sits above anything a release can stack, so it separates languages for sure
+    step = profile["until_score"]
+    reject = -(len(ranking) + 1) * step
+    scores = {cfs[role]["trash_id"]: s for role, s in language_cf_scores(ranking, step, reject, profile["min_score"]).items()}
+    # A language score must not outweigh what the guide refuses (x265, LQ...), or stop upgrades within a language
+    scores.update({tid: reject for tid, s in profile["cfs"].items() if s <= GUIDE_REFUSAL and tid not in language})
+    plan["until_score"] = profile["min_score"] + len(ranking) * step
     scores.update({tid: 0 for tid in accepted})
     plan["custom_formats"] = [
         {"trash_ids": [tid], "assign_scores_to": [{"name": plan["profile_name"], "score": score}]}

@@ -248,7 +248,8 @@ class InstanceEditor(QWidget):
         self.on_template_changed(0)
         self.combo_qdef.setCurrentText(plan["qdef"])
 
-        profile = {**self.data_manager.get_quality_profile_by_id(plan["profile_trash_id"]), "active": True}
+        profile = {**self.data_manager.get_quality_profile_by_id(plan["profile_trash_id"]), "active": True,
+                   "upgrade": {"until_score": plan["until_score"]}}
         if plan["score_set"]:
             profile["score_set"] = plan["score_set"]
         self.act2_widget.load_profiles([profile])

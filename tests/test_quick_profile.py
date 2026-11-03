@@ -53,17 +53,17 @@ def test_profiles_and_scores_detected_from_data(dm):
         for variants in tiers.values():
             assert {"french-multi-vf", "french-multi-vo", "french-vostfr"} <= set(variants)
         assert qp.profile_tiers(dm, app, anime=True)
-        assert qp.guide_steps(dm, app, "french-multi-vf") == (500, -10000)
 
 
 def test_wizard_follows_guide_score_changes(dm):
-    """If TRaSH re-scores a criterion, the wizard output follows without code changes."""
+    """If TRaSH changes a profile's until score or refuses a new criterion, the wizard follows without code changes."""
     changed = copy.deepcopy(dm)
-    multi = next(cf for cf in changed.get_custom_formats_for_app("radarr") if cf["name"] == "Language: Original + French")
-    multi["trash_scores"]["french-multi-vf"] = 700
+    profile_id = qp.profile_tiers(changed, "radarr", False)["HD Bluray + WEB"]["french-multi-vf"]
+    changed.get_quality_profile_by_id(profile_id)["cutoffFormatScore"] = 20000
     plan = qp.build_quick_profile(changed, "radarr", False, "HD Bluray + WEB", ["multi", "vf", "vostfr"])
     scores = {changed.get_cf_by_id(e["trash_ids"][0])["name"]: e["assign_scores_to"][0]["score"] for e in plan["custom_formats"]}
-    assert scores["Language: Original + French"] == 1400 and scores["Language: Not Original"] == 700
+    assert scores["Language: Original + French"] == 40000 and scores["Language: Not Original"] == 20000
+    assert plan["until_score"] == 60000
 
 
 def test_rejected_criteria_lists_codecs(dm):
@@ -130,7 +130,7 @@ def test_wizard_matches_official_template_except_overrides(dm, tmp_path, app_typ
     overridden = {t for e in qp.build_quick_profile(dm, app_type, False, tier, ["multi", "vf", "vostfr"],
                                                     _accept(dm, app_type, False, tier, ["multi", "vf", "vostfr"]))["custom_formats"]
                   for t in e["trash_ids"]}
-    for key in ("leaves", "cutoff", "until_score", "min_score", "score_set", "upgrade"):
+    for key in ("leaves", "cutoff", "min_score", "score_set", "upgrade"):
         assert got[key] == ref[key], key
     assert {t: s for t, s in got["cfs"].items() if t not in overridden} == {t: s for t, s in ref["cfs"].items() if t not in overridden}
 
@@ -145,3 +145,32 @@ def test_wizard_anime_keeps_french_release_groups(dm, tmp_path):
     for unwanted in ("FastSUB", "FR LQ"):
         assert by_name.get(unwanted, 0) <= -10000, unwanted
     assert "Language: Not English" not in by_name  # select, not select_all, on language groups
+
+
+@pytest.mark.parametrize("ranking", [["vo"], ["vo", "vostfr"], ["vostfr"], ["vostfr", "vo"], ["multi", "vf", "vostfr"], ["multi", "vf", "vostfr", "vo"]])
+def test_language_order_beats_any_release_without_undoing_refusals(dm, ranking):
+    """Every profile: a better language beats a worse one with the best group, audio and HDR; refusals still refuse."""
+    roles = {"multi": ["orig_french"], "vf": ["not_original"], "vo": ["not_french"], "vostfr": ["not_french", "vostfr"]}
+    for app in ("radarr", "sonarr"):
+        group_of = {cf["trash_id"]: g["name"] for g in dm.get_includes_by_type(app, "custom-formats") for cf in g["content"]["custom_formats"]}
+        for anime in (False, True):
+            for tier in qp.profile_tiers(dm, app, anime):
+                plan = qp.build_quick_profile(dm, app, anime, tier, ranking)
+                by_id = {t: e["assign_scores_to"][0]["score"] for e in plan["custom_formats"] for t in e["trash_ids"]}
+                cfs = qp._language_cfs(dm, app)
+                language = {cf["trash_id"] for cf in cfs.values()}
+                nets = [sum(by_id[cfs[r]["trash_id"]] for r in roles[lang]) for lang in ranking]
+                (_, profile), = resolve(qp._instance(plan, app, dm), app, dm).items()
+                # A release matches at most one CF of a group: its best possible total outside languages
+                best_by_group = {}
+                for t, s in profile["cfs"].items():
+                    if t not in language and s > 0:
+                        key = group_of.get(t, t)
+                        best_by_group[key] = max(best_by_group.get(key, 0), s)
+                best_release = sum(best_by_group.values())
+                context = (app, tier, ranking, nets)
+                assert nets[-1] >= profile["min_score"], context
+                assert all(a > b + best_release for a, b in zip(nets, nets[1:])), context
+                assert nets[0] + best_release <= plan["until_score"], context
+                refusals = [by_id[t] for t, s in profile["cfs"].items() if s <= qp.GUIDE_REFUSAL and t not in language]
+                assert refusals and all(nets[0] + best_release + r < profile["min_score"] for r in refusals), context
