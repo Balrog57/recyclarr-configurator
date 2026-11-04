@@ -205,3 +205,29 @@ def test_wizard_anime_keeps_french_release_groups(dm, tmp_path):
     for unwanted in ("FastSUB", "FR LQ"):
         assert by_name.get(unwanted, 0) <= -10000, unwanted
     assert "Language: Not English" not in by_name  # select, not select_all, on language groups
+
+
+def test_same_server_name_blocks_generation(monkeypatch):
+    # Recyclarr syncs nothing and exits 0 when a Radarr and a Sonarr share a name
+    from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+    from main_gui_app import MainWindow
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr("main_gui_app.UPDATE_DATA_ON_STARTUP", False)  # no GitHub sync in tests
+    win = MainWindow()
+    warned, asked = [], []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warned.append(a[2]))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.No)
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (asked.append(1), ("", ""))[1])
+    radarr, sonarr = win.tabs.widget(0), win.tabs.widget(1)
+    radarr.apply_quick_profile(False, "HD Bluray + WEB", "french-multi-vf")
+    sonarr.apply_quick_profile(False, "HD Bluray + WEB (1080p)", "french-multi-vf")
+    for ed in (radarr, sonarr):
+        ed.config.base_url, ed.config.api_key = "http://x", "k"
+
+    radarr.config.name = sonarr.config.name = "mon-serveur"
+    win.generate_yaml()
+    assert "mon-serveur" in warned[0] and not asked
+
+    sonarr.config.name = "autre"
+    win.generate_yaml()
+    assert len(warned) == 1 and asked

@@ -709,6 +709,15 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Rien à générer",
                                     "Choisissez d'abord un profil : utilisez l'assistant rapide de l'étape 1.")
             return
+        # Recyclarr silently syncs nothing (exit code 0) when two instances share a name, even across Radarr and Sonarr
+        names = [e.config.name for e in editors]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            QMessageBox.warning(self, "Deux serveurs portent le même nom",
+                                f"Nom en double : {', '.join(duplicates)}.\n\n"
+                                "Recyclarr ne synchronise rien si deux serveurs ont le même nom, même un Radarr et un Sonarr. "
+                                "Faites un clic droit sur l'onglet, puis « Renommer ».")
+            return
         problems = [p for e in editors for p in e.problems()]
         if problems and QMessageBox.question(self, "Vérifiez votre configuration",
                                              "\n\n".join(problems) + "\n\nGénérer quand même ?",
