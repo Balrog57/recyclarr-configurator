@@ -96,3 +96,4 @@ The advanced editor for Custom Formats.
 ## 🆘 Troubleshooting
 *   **Crash at startup?** Check your internet connection for the initial data update (the portable .exe falls back to its bundled data).
 *   **Profiles overlapping?** Use groups to bundle qualities, otherwise they will remain as individual items.
+*   **"Deux serveurs portent le même nom"?** Recyclarr syncs nothing, without any error, when two servers share a name (even a Radarr and a Sonarr): right-click the tab, then « Renommer ».
