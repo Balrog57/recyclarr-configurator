@@ -335,10 +335,17 @@ class InstanceEditor(QWidget):
         manager._import_profiles(new_profiles_data, source="include")
         manager.refresh_list()
 
+    def _sync_score_sets(self):
+        """Step 4 needs each profile's TRaSH score set for the scores it prefills."""
+        self.act3_widget.score_sets = {
+            p.name: p.score_set or (self.data_manager.get_quality_profile_by_id(p.trash_id) or {}).get("score_set")
+            for p in self.act2_widget.get_profiles()}
+
     def _refresh_guide_scores(self):
         """Act 4 base layer: every CF score per profile exactly as Recyclarr will sync it (guide + groups)."""
         self._sync_act3_profiles()
         profiles = [p for p in self.act2_widget.get_profiles() if p.active]
+        self._sync_score_sets()
         self.act3_widget.set_available_profiles(sorted(p.name for p in profiles))
         config = replace(self.get_config(), active_cfs=[])
         instance = YAMLGenerator()._generate_instance_config(config, default_qdef=QDEF[self.app_type])
@@ -371,6 +378,7 @@ class InstanceEditor(QWidget):
         groups_add = (data.get("custom_format_groups") or {}).get("add") or []
         self.loaded_group_options = {g["trash_id"]: {k: v for k, v in g.items() if k != "trash_id"}
                                      for g in groups_add if isinstance(g, dict) and len(g) > 1}
+        self._sync_score_sets()
         self.act3_widget.load_assignments_from_template(self._assign_by_name(data.get("custom_formats") or [], profiles),
                                                         clear_existing=True)
 

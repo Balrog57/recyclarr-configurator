@@ -116,6 +116,12 @@ def group_add_options(dm, app: str, group_id: str, profiles: list) -> dict:
     if not any(t and group_includes(group, t) for _, t, _ in profiles):
         options["assign_scores_to"] = [{"name": name} for name, _, _ in profiles]
     cfs = group["content"]["custom_formats"]
+    # Optional CFs of a group with defaults: only those the guide scores for this exact score set (e.g. Sonarr Language Profiles)
+    scored = {s for _, _, s in profiles if s and s != "default"}
+    extra = [cf["trash_id"] for cf in cfs if not (cf.get("required") or cf.get("default"))
+             and scored & set((dm.get_cf_by_id(cf["trash_id"]) or {}).get("trash_scores") or {})]
+    if extra and any(cf.get("required") or cf.get("default") for cf in cfs):
+        options["select"] = extra
     if not any(cf.get("required") or cf.get("default") for cf in cfs):
         sets = {s for _, _, s in profiles if s and s != "default"}
         relevant = set()

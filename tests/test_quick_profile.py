@@ -231,3 +231,32 @@ def test_same_server_name_blocks_generation(monkeypatch):
     sonarr.config.name = "autre"
     win.generate_yaml()
     assert len(warned) == 1 and asked
+
+
+def test_step4_prefills_the_profile_score_set_not_a_guess_from_its_name(dm):
+    from PySide6.QtWidgets import QApplication
+    from main_gui_app import InstanceEditor
+    QApplication.instance() or QApplication([])
+    ed = InstanceEditor(dm, "radarr")
+    anime = next(p for p in dm.get_quality_profiles_for_app("radarr") if p["name"] == "[Anime] Remux-1080p")
+    ed.act1_widget.set_selected_includes([anime["trash_id"]])
+    ed.tabs.setCurrentIndex(3)
+    tier = next(c for c in dm.get_custom_formats_for_app("radarr") if c["name"] == "Remux Tier 01")
+    guide = tier["trash_scores"][anime["score_set"]]
+    assert ed.act3_widget._infer_score(tier, anime["name"], tier["trash_scores"]["default"]) == guide
+    vostfr = next(c for c in dm.get_custom_formats_for_app("radarr") if c["name"] == "VOSTFR")
+    default = vostfr["trash_scores"]["default"]
+    assert ed.act3_widget._infer_score(vostfr, "Free VOSTFR test", default) == default  # a name means nothing
+
+
+@pytest.mark.parametrize("app", ["radarr", "sonarr"])
+@pytest.mark.parametrize("variant", ["french-anime-multi", "french-anime-vostfr"])
+def test_french_anime_has_the_language_scores_of_trash_table(dm, app, variant):
+    # Sonarr's Language Profiles group is default=true: its optional CFs must still be selected
+    plan = qp.build_quick_profile(dm, app, True, "Remux-1080p", variant)
+    inst = qp._instance(plan, app, dm, plan["custom_formats"])
+    (_, res), = resolve(inst, app, dm).items()
+    for name in ("Language: Original + French", "Language: Not Original", "VOSTFR"):
+        cf = next(c for c in dm.get_custom_formats_for_app(app) if c["name"] == name)
+        want = cf["trash_scores"][variant]
+        assert res["cfs"].get(cf["trash_id"], 0) == want, name

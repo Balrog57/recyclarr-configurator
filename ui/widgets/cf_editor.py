@@ -13,6 +13,7 @@ class CFEditor(QWidget):
         super().__init__()
         self.data = all_formats_data  # Json loaded data (list of dicts)
         self.profiles = available_profiles # List of profile names (strings)
+        self.score_sets = {} # {profile name: TRaSH score set}
         self.active_assignments = {} # {trash_id: CustomFormatAssignment} - MANUAL OVERRIDES
         self.template_assignments = {} # {trash_id: CustomFormatAssignment} - FROM ACT 2 INCLUDES
         
@@ -436,47 +437,7 @@ class CFEditor(QWidget):
                 )
         self._refresh_marks()
 
+
     def _infer_score(self, cf_data: dict, profile_name: str, default_score: int) -> int:
-        """Attempts to infer the correct score for a profile based on trash_scores keys."""
-        trash_scores = cf_data.get('trash_scores', {})
-        if not trash_scores: return default_score
-        
-        # Normalize profile name
-        p_norm = profile_name.lower().replace(" ", "-").replace("_", "-")
-        
-        best_match_score = default_score
-        
-        # Heuristic: Check if specific trash_score keys are contained in the profile name
-        # e.g. "french-vostfr" (key) vs "fr-vostfr-web-2160p" (profile)
-        # We look for significant overlap.
-        for key, sc in trash_scores.items():
-            if key == 'default': continue
-            
-            # Simple containment check: if the key (or its significant parts) is in the profile name
-            # Remove 'french' from key as it's common prefix for FR profiles?
-            k_norm = key.lower()
-            
-            # 0. Alias substitution (french -> fr)
-            k_alias = k_norm.replace("french", "fr")
-            
-            # 1. Exact containment (with or without alias)
-            if k_norm in p_norm or k_alias in p_norm:
-                return sc
-                
-            # 2. Token overlap
-            # Split key by '-' and check if ALL tokens map to the profile
-            # We use the alias version to match "fr" tokens if needed
-            tokens = [t for t in k_alias.split('-') if t not in ['hq', 'hd']] 
-            if tokens and all(t in p_norm for t in tokens):
-                return sc
-                
-            # 3. Special case fallback 
-            if k_alias in ["vostfr", "vf", "vo"] and k_alias in p_norm.split("-"):
-                 return sc
-
-        return best_match_score
-
-        # Refresh UI
-        current_item = self.list_widget.currentItem()
-        if current_item:
-            self.load_details(current_item)
+        """The score Recyclarr gives this CF on this profile when none is set: the profile's score set, else default."""
+        return (cf_data.get('trash_scores') or {}).get(self.score_sets.get(profile_name), default_score)
