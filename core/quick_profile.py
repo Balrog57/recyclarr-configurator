@@ -1,28 +1,29 @@
 """
-Quick profile builder: turns simple preferences (content, quality, language order, accepted criteria)
-into a Recyclarr v8 instance setup. Everything is detected from the TRaSH Guides data downloaded at
-startup (profiles, quality tiers, score sets, language CFs, CF groups, scores), so new or re-scored
-TRaSH entries show up without code changes.
+Quick profile builder: turns simple choices (content, quality, TRaSH language variant, accepted criteria)
+into a Recyclarr v8 instance setup. Profiles, variants (score sets), CF groups and scores all come from the
+TRaSH Guides data downloaded at startup: nothing is computed here, so new or re-scored entries just show up.
 
 Language logic (checked against Radarr/Sonarr LanguageParser): "VOSTFR" is NOT parsed as French,
 so a VOSTFR release looks like plain VO (original audio) and only the VOSTFR title CF tells them apart.
-Each language "bucket" ends up with this net score:
+Each language's net score in a variant, read from the guide:
     MULTi  (original + French audio) = Language: Original + French
     VF     (French audio only)       = Language: Not Original
     VOSTFR (original audio + FR subs)= Language: Not French + VOSTFR
     VO     (original audio only)     = Language: Not French
-The chosen order always wins over group, audio and HDR scores, and the last accepted language reaches
-the profile's minimum score, so an accepted language is never refused for having an unknown group.
 """
 import re
 
 from core.resolver import auto_groups, group_includes, resolve
 
-LANGUAGES = {
-    "multi": "MULTi (VO + VF)",
-    "vf": "VF seule",
-    "vostfr": "VOSTFR",
-    "vo": "VO sans sous-titres FR",
+LANGUAGES = {"multi": "MULTi", "vf": "VF", "vo": "VO", "vostfr": "VOSTFR"}
+
+# Display names of the TRaSH score sets; a new TRaSH variant shows under its own name
+VARIANT_LABELS = {
+    "french-multi-vf": "MULTi, sinon VF",
+    "french-multi-vo": "MULTi, sinon VO",
+    "french-vostfr": "VOSTFR, sinon VO",
+    "french-anime-multi": "MULTi",
+    "french-anime-vostfr": "VOSTFR",
 }
 
 # TRaSH custom format names carrying the language logic above
@@ -32,9 +33,6 @@ LANGUAGE_CF_NAMES = {
     "not_french": "Language: Not French",
     "vostfr": "VOSTFR",
 }
-
-# Below this a guide score means "refuse this release"; above it, a small penalty (e.g. v0 at -51)
-GUIDE_REFUSAL = -1000
 
 # Recyclarr quality_definition types (Recyclarr schema values, not guide data)
 QDEF = {"radarr": "movie", "sonarr": "series"}
@@ -61,17 +59,6 @@ def _score_sets(dm, app: str, prefix: str) -> list:
     return sorted({k for cf in dm.get_custom_formats_for_app(app) for k in (cf.get("trash_scores") or {}) if k.startswith(prefix)})
 
 
-def _pick_set(sets, ranking: list):
-    """Score set matching the preferred language: VOSTFR-first, else MULTi (VF fallback or VO fallback)."""
-    top = ranking[0] if ranking else None
-    wanted = ["vostfr"] if top in ("vostfr", "vo") else (["multi-vf", "multi"] if "vf" in ranking else ["multi-vo", "multi"])
-    for key in wanted:
-        match = [s for s in sets if key in s]
-        if match:
-            return match[0]
-    return sorted(sets)[0] if sets else None
-
-
 def _language_cfs(dm, app: str) -> dict:
     by_name = {cf["name"]: cf for cf in dm.get_custom_formats_for_app(app)}
     missing = [n for n in LANGUAGE_CF_NAMES.values() if n not in by_name]
@@ -80,32 +67,22 @@ def _language_cfs(dm, app: str) -> dict:
     return {role: by_name[name] for role, name in LANGUAGE_CF_NAMES.items()}
 
 
-def language_cf_scores(ranking: list, step: int = 500, reject: int = -10000, floor: int = 0) -> dict:
-    """ranking: accepted languages, best first. floor: net score of the last one. Returns the score of each language CF role."""
-    if not ranking:
-        raise ValueError("Au moins une langue doit être acceptée")
-    net = {lang: reject for lang in LANGUAGES}
-    for i, lang in enumerate(ranking):
-        net[lang] = floor + (len(ranking) - 1 - i) * step
-    return {
-        "orig_french": net["multi"],
-        "not_original": net["vf"],
-        "not_french": net["vo"],
-        "vostfr": net["vostfr"] - net["vo"],
-    }
-
-
-def _base(dm, app: str, anime: bool, tier: str, ranking: list) -> dict:
-    """Guide profile + score set + extra CF groups for these preferences (before user overrides)."""
-    variants = profile_tiers(dm, app, anime).get(tier)
-    if not variants:
-        raise ValueError(f"Palier « {tier} » introuvable dans les profils TRaSH : mettez les données à jour")
+def variants(dm, app: str, anime: bool, tier: str) -> list:
+    """TRaSH language variants (score sets) of a quality tier."""
     if anime:
-        profile_id = next(iter(variants.values()))
-        score_set = _pick_set(_score_sets(dm, app, "french-anime"), ranking)
-    else:
-        score_set = _pick_set(list(variants), ranking)
-        profile_id = variants[score_set]
+        return _score_sets(dm, app, "french-anime")
+    return sorted(profile_tiers(dm, app, False).get(tier, {}))
+
+
+def _base(dm, app: str, anime: bool, tier: str, variant: str) -> dict:
+    """Guide profile + score set + extra CF groups for these choices (before user overrides)."""
+    tiers = profile_tiers(dm, app, anime).get(tier)
+    if not tiers:
+        raise ValueError(f"Palier « {tier} » introuvable dans les profils TRaSH : mettez les données à jour")
+    if variant not in variants(dm, app, anime, tier):
+        raise ValueError(f"Variante « {variant} » introuvable dans les données TRaSH : mettez les données à jour")
+    profile_id = next(iter(tiers.values())) if anime else tiers[variant]
+    score_set = variant
     guide_qp = dm.get_quality_profile_by_id(profile_id)
 
     groups = []
@@ -181,9 +158,9 @@ def _instance(base: dict, app: str, dm, custom_formats=None) -> dict:
     return inst
 
 
-def rejected_criteria(dm, app: str, anime: bool, tier: str, ranking: list) -> list:
+def rejected_criteria(dm, app: str, anime: bool, tier: str, variant: str) -> list:
     """[(trash_id, name, score)] the guide rejects (negative score) in this profile, language CFs excluded."""
-    base = _base(dm, app, anime, tier, ranking)
+    base = _base(dm, app, anime, tier, variant)
     (_, profile), = resolve(_instance(base, app, dm), app, dm).items()
     language = {cf["trash_id"] for cf in _language_cfs(dm, app).values()}
     rows = [(tid, (dm.get_cf_by_id(tid) or {}).get("name", tid), score)
@@ -191,32 +168,33 @@ def rejected_criteria(dm, app: str, anime: bool, tier: str, ranking: list) -> li
     return sorted(rows, key=lambda r: r[1].lower())
 
 
-def build_quick_profile(dm, app: str, anime: bool, tier: str, ranking: list, accepted=()) -> dict:
+def build_quick_profile(dm, app: str, anime: bool, tier: str, variant: str, accepted=()) -> dict:
     """Returns {qdef, profile_trash_id, profile_name, score_set, cf_groups [ids], custom_formats (YAML-shaped)}.
-    accepted: trash_ids of guide-rejected criteria to accept (score 0), e.g. x265 or AV1."""
-    if not ranking:
-        raise ValueError("Au moins une langue doit être acceptée")
-    plan = _base(dm, app, anime, tier, ranking)
-    cfs = _language_cfs(dm, app)
-    (_, profile), = resolve(_instance(plan, app, dm), app, dm).items()
-    language = {cf["trash_id"] for cf in cfs.values()}
-    # The guide's until score sits above anything a release can stack, so it separates languages for sure
-    step = profile["until_score"]
-    reject = -(len(ranking) + 1) * step
-    scores = {cfs[role]["trash_id"]: s for role, s in language_cf_scores(ranking, step, reject, profile["min_score"]).items()}
-    # A language score must not outweigh what the guide refuses (x265, LQ...), or stop upgrades within a language
-    scores.update({tid: reject for tid, s in profile["cfs"].items() if s <= GUIDE_REFUSAL and tid not in language})
-    plan["until_score"] = profile["min_score"] + len(ranking) * step
-    scores.update({tid: 0 for tid in accepted})
+    Scores are the guide's. accepted: trash_ids of guide-rejected criteria the user accepts (score 0), e.g. x265 or AV1."""
+    plan = _base(dm, app, anime, tier, variant)
     plan["custom_formats"] = [
-        {"trash_ids": [tid], "assign_scores_to": [{"name": plan["profile_name"], "score": score}]}
-        for tid, score in scores.items()
+        {"trash_ids": [tid], "assign_scores_to": [{"name": plan["profile_name"], "score": 0}]}
+        for tid in accepted
     ]
     return plan
 
 
-def describe(ranking: list) -> str:
-    """Human summary, e.g. 'MULTi (VO + VF) > VF seule > VOSTFR — refusé : VO sans sous-titres FR'."""
-    refused = [LANGUAGES[l] for l in LANGUAGES if l not in ranking]
-    text = " > ".join(LANGUAGES[l] for l in ranking) or "aucune langue"
-    return text + (f"  —  refusé : {', '.join(refused)}" if refused else "")
+def describe(dm, app: str, anime: bool, tier: str, variant: str) -> str:
+    """What this variant does with each language, read from the guide's scores."""
+    (_, profile), = resolve(_instance(_base(dm, app, anime, tier, variant), app, dm), app, dm).items()
+    cfs = _language_cfs(dm, app)
+    score = {role: (cf.get("trash_scores") or {}).get(variant, 0) for role, cf in cfs.items()}
+    net = {"multi": score["orig_french"], "vf": score["not_original"], "vo": score["not_french"],
+           "vostfr": score["not_french"] + score["vostfr"]}
+    top = max(net.values())
+    parts = {"Préférée": [], "Acceptée": [], "Acceptée si le groupe est reconnu": [], "Refusée": []}
+    for lang, value in net.items():
+        if value < 0:
+            parts["Refusée"].append(LANGUAGES[lang])
+        elif value == top:
+            parts["Préférée"].append(LANGUAGES[lang])
+        elif value < profile["min_score"]:
+            parts["Acceptée si le groupe est reconnu"].append(LANGUAGES[lang])
+        else:
+            parts["Acceptée"].append(LANGUAGES[lang])
+    return " — ".join(f"{label} : {', '.join(langs)}" for label, langs in parts.items() if langs)

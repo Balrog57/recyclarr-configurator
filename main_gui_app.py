@@ -155,7 +155,7 @@ class InstanceEditor(QWidget):
         hint_quick = QLabel("Le plus simple : l'assistant crée votre profil en quelques clics.")
         hint_quick.setStyleSheet("color: #888;")
         gen_layout.addRow(hint_quick)
-        self.btn_quick = QPushButton("⚡ Assistant rapide (langues, qualité, codecs)…")
+        self.btn_quick = QPushButton("⚡ Assistant rapide (qualité, langue, codecs)…")
         self.btn_quick.clicked.connect(self.open_quick_wizard)
         gen_layout.addRow(self.btn_quick)
 
@@ -238,9 +238,9 @@ class InstanceEditor(QWidget):
             except ValueError as e:
                 QMessageBox.warning(self, "Assistant rapide", str(e))
 
-    def apply_quick_profile(self, anime, tier, ranking, accepted=()):
-        """Replaces the instance setup with a TRaSH profile tuned to the given preferences."""
-        plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, ranking, accepted)
+    def apply_quick_profile(self, anime, tier, variant, accepted=()):
+        """Replaces the instance setup with a TRaSH profile in the chosen language variant."""
+        plan = build_quick_profile(self.data_manager, self.app_type, anime, tier, variant, accepted)
         # "Aucun" mode, cleared even if it was already selected
         self.combo_mode.blockSignals(True)
         self.combo_mode.setCurrentIndex(0)
@@ -248,8 +248,7 @@ class InstanceEditor(QWidget):
         self.on_template_changed(0)
         self.combo_qdef.setCurrentText(plan["qdef"])
 
-        profile = {**self.data_manager.get_quality_profile_by_id(plan["profile_trash_id"]), "active": True,
-                   "upgrade": {"until_score": plan["until_score"]}}
+        profile = {**self.data_manager.get_quality_profile_by_id(plan["profile_trash_id"]), "active": True}
         if plan["score_set"]:
             profile["score_set"] = plan["score_set"]
         self.act2_widget.load_profiles([profile])

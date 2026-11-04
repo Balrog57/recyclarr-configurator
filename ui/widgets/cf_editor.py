@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QListWidget, 
                                QListWidgetItem, QLabel, QSpinBox, QCheckBox, QGroupBox, QLineEdit,
-                               QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit)
+                               QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QPushButton)
 from PySide6.QtCore import Qt
 from core.models import CustomFormatAssignment
 
@@ -26,7 +26,7 @@ class CFEditor(QWidget):
         header_lbl.setProperty("class", "h2")
         layout.addWidget(header_lbl)
         
-        desc_lbl = QLabel("Plus le score d'un critère est haut, plus la version est préférée. En gras : critères déjà appliqués par TRaSH. Cochez un profil pour changer son score.")
+        desc_lbl = QLabel("Plus le score est haut, plus la version est préférée. En gras : critères appliqués par TRaSH. Pour ajouter ou modifier un score, sur un profil TRaSH comme sur le vôtre : choisissez un critère, cochez « Mon score » et saisissez la valeur (✎ dans la liste). Décochez pour revenir à TRaSH.")
         desc_lbl.setWordWrap(True)
         desc_lbl.setStyleSheet("color: #888; margin-bottom: 10px;")
         layout.addWidget(desc_lbl)
@@ -42,6 +42,10 @@ class CFEditor(QWidget):
         self.search_input.setPlaceholderText("Rechercher un critère…")
         self.search_input.textChanged.connect(self.filter_list)
         left_layout.addWidget(self.search_input)
+
+        self.only_mine = QCheckBox("Seulement mes scores")
+        self.only_mine.toggled.connect(self.filter_list)
+        left_layout.addWidget(self.only_mine)
         
         # List
         self.list_widget = QListWidget()
@@ -76,10 +80,10 @@ class CFEditor(QWidget):
         # Columns: [Profile Name, Enabled (Checkbox), Score (Spinbox)]
         self.profile_table = QTableWidget()
         self.profile_table.setColumnCount(3)
-        self.profile_table.setHorizontalHeaderLabels(["Profil", "Actif", "Score"])
+        self.profile_table.setHorizontalHeaderLabels(["Profil", "Mon score", "Score"])
         self.profile_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.profile_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
-        self.profile_table.setColumnWidth(1, 60) # Fixed width for Checkbox
+        self.profile_table.setColumnWidth(1, 80) # Fixed width for Checkbox
         self.profile_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         self.profile_table.setColumnWidth(2, 130) # Wider for -10000
         
@@ -90,6 +94,11 @@ class CFEditor(QWidget):
         # self.profile_table.itemChanged.connect(self.on_table_item_changed) # Removed to avoid conflict with cell widgets
         
         details_layout.addWidget(self.profile_table, 2) # Stretch 2/3
+
+        # Recyclarr can't drop a CF the guide applies: a score of 0 removes its effect
+        self.btn_neutralize = QPushButton("Retirer ce critère de mes profils (score 0)")
+        self.btn_neutralize.clicked.connect(self.neutralize)
+        details_layout.addWidget(self.btn_neutralize)
         
         self.details_panel.setLayout(details_layout)
         
@@ -101,14 +110,33 @@ class CFEditor(QWidget):
         sorted_cfs = sorted(self.data, key=lambda x: x.get('name', ''))
         for cf in sorted_cfs:
             item = QListWidgetItem(cf.get('name', 'Unknown'))
-            item.setData(99, cf.get('trash_id')) 
+            item.setData(99, cf.get('trash_id'))
+            item.setData(98, cf.get('name', 'Unknown')) 
             item.setToolTip(cf.get('description', 'Pas de description'))
             self.list_widget.addItem(item)
             
-    def filter_list(self, text):
+    def filter_list(self, *_):
+        text = self.search_input.text().lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            item.setHidden(text.lower() not in item.text().lower())
+            item.setHidden(text not in item.text().lower()
+                           or (self.only_mine.isChecked() and item.data(99) not in self.active_assignments))
+
+    def _refresh_marks(self):
+        """Shows the user's own scores in the list."""
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            assignment = self.active_assignments.get(item.data(99))
+            scores = sorted({s["score"] for s in assignment.profile_scores}) if assignment else []
+            mark = f"  ✎ {' / '.join(map(str, scores))}" if scores else ""
+            item.setText(item.data(98) + mark)
+        self.filter_list()
+
+    def neutralize(self):
+        for row in range(self.profile_table.rowCount()):
+            self.profile_table.cellWidget(row, 1).layout().itemAt(0).widget().setChecked(True)
+            self.profile_table.cellWidget(row, 2).setValue(0)
+        self.update_model()
 
     def load_details(self, item):
         trash_id = item.data(99)
@@ -215,6 +243,10 @@ class CFEditor(QWidget):
         self.update_model()
         
     def update_model(self):
+        self._save_table()
+        self._refresh_marks()
+
+    def _save_table(self):
         # Save current table state to active_assignments
         item = self.list_widget.currentItem()
         if not item: return
@@ -402,6 +434,7 @@ class CFEditor(QWidget):
                     profiles=p_names, 
                     profile_scores=profile_scores
                 )
+        self._refresh_marks()
 
     def _infer_score(self, cf_data: dict, profile_name: str, default_score: int) -> int:
         """Attempts to infer the correct score for a profile based on trash_scores keys."""
